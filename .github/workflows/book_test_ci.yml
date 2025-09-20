@@ -1,0 +1,26 @@
+name: Builds, tests & co
+
+on:
+  - push
+  - pull_request
+
+permissions: read-all
+
+jobs:
+  book_test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tree
+        uses: actions/checkout@v5
+
+      - name: Set-up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5
+
+      - run: opam install . --deps-only --with-test
+      
+      - run: opam exec -- dune build 
+
+      - run: ./book_tests/test_compiler ./_build/default/bin/main.exe --verbose --chapter 8 --stage parse
+      
