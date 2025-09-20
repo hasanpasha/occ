@@ -12,6 +12,7 @@ depends: [
   "ocaml"
   "cmdliner"
   "logs"
+  "fmt"
   "ppx_deriving"
   "odoc" {with-doc}
 ]

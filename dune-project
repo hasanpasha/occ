@@ -19,6 +19,6 @@
  (name occ)
  (synopsis "C compiler")
  (description "A C programming language compiler")
- (depends ocaml cmdliner logs ppx_deriving)
+ (depends ocaml cmdliner logs fmt ppx_deriving)
  (tags
   ("C" "programming" "language" "compiler" your project)))
