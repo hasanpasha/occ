@@ -52,10 +52,7 @@ let occ (options: options) =
   end;
 
   if options.validate then begin 
-    let vir = 
-      Variables_resolver.resolve program 
-      |> Label_resolver.resolve
-      |> Loop_switch_labeler.resolve in
+    let vir = Validate.validate program in
     Logs.info (fun m -> m "%s" (Vir.show_program vir));
     exit(0)
   end;

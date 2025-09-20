@@ -1,4 +1,4 @@
-let src = Logs.Src.create "occ.label_resolver" ~doc:"logs occ's label resolver events"
+let src = Logs.Src.create "occ.loop_switch_labeler" ~doc:"logs occ's loop switch labeler events"
 module Log = (val Logs.src_log src : Logs.LOG)
 
 type t = 
