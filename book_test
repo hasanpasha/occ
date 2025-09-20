@@ -1,0 +1,1 @@
+dune build && ./book_tests/test_compiler ./_build/default/bin/main.exe --verbose $@ 
