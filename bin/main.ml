@@ -21,8 +21,11 @@ let replace_extension filename new_ext =
     filename ^ "." ^ new_ext
 
 let occ (options: options) =
+  Logs.set_reporter (Logs_fmt.reporter ());
+
   let _ = options.verbose in
 
+  (* Logs.app (fun m -> m "HELLO, WORLD!\n"); *)
   
   let cc = replace_extension options.input "cc" in
   
@@ -37,7 +40,7 @@ let occ (options: options) =
 
   if options.lex then
     let seq = Lexer.lex lexer in
-    Seq.iter  (fun tok -> print_endline (Token.show tok)) seq;
+    Seq.iter  (fun tok -> Logs.debug (fun m -> m "%s" (Token.show tok))) seq;
     exit(0);
   else
 

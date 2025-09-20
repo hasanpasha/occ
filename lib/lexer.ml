@@ -1,3 +1,6 @@
+let src = Logs.Src.create "occ.lexer" ~doc:"logs occ's lexer events"
+module Log = (val Logs.src_log src : Logs.LOG)
+
 open Token
 
 type t = 
@@ -84,7 +87,9 @@ and next_token lexer =
     | ':' -> sym1 Colon
     | _ when is_identifier_start ch -> lex_identifier lexer 
     | _ when Char.is_digit ch -> lex_number lexer 
-    | _ -> failwith (Printf.sprintf "unknown char: %c" ch)
+    | _ ->
+      Log.err (fun m -> m "unrecognized character: %c" ch); 
+      failwith (Printf.sprintf "unknown char: %c" ch)
     in
     lexer, Some token
 

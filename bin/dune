@@ -1,4 +1,4 @@
 (executable
  (public_name occ)
  (name main)
- (libraries occ cmdliner))
+ (libraries occ cmdliner logs logs.fmt))
