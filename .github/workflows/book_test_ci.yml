@@ -24,5 +24,5 @@ jobs:
         run: opam install . --deps-only
       
       - name: Run book test
-        run: ./book_test --chapter 8 --stage parse
+        run: ./ci.sh
       
