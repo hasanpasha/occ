@@ -1,1 +1,1 @@
-dune build && ./_build/default/bin/main.exe $@
+opam exec -- dune build && ./_build/default/bin/main.exe $@
