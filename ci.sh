@@ -1,1 +1,1 @@
-./book_test --chapter 8 --extra-credit --stage parse
+./book_test --chapter 8 --extra-credit --stage validate

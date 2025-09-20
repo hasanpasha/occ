@@ -17,16 +17,16 @@ let replace_extension filename new_ext =
     let base = Filename.chop_extension filename in
     base ^ "." ^ new_ext
   with Invalid_argument _ ->
-    (* no extension, just append *)
     filename ^ "." ^ new_ext
 
 let occ (options: options) =
   Logs.set_reporter (Logs_fmt.reporter ());
 
-  let _ = options.verbose in
+  if options.verbose then
+    Logs.set_level (Some Logs.Debug)
+  else 
+    Logs.set_level (Some Logs.Info);
 
-  (* Logs.app (fun m -> m "HELLO, WORLD!\n"); *)
-  
   let cc = replace_extension options.input "cc" in
   
   let expand_cmd_code = Sys.command (Printf.sprintf "gcc -P -E %s -o %s" options.input cc) in
@@ -38,30 +38,35 @@ let occ (options: options) =
   
   let lexer = Lexer.init input in
 
-  if options.lex then
+  if options.lex then begin
     let seq = Lexer.lex lexer in
-    Seq.iter  (fun tok -> Logs.debug (fun m -> m "%s" (Token.show tok))) seq;
-    exit(0);
-  else
-
-  if options.parse then
-    let parser = Parser.init lexer in
-    let program = Parser.program parser in
-    print_endline (Ast.show_program program);
+    Seq.iter  (fun tok -> Logs.info (fun m -> m "%s" (Token.show tok))) seq;
     exit(0)
-  else
+  end;
+    
+  let program = Parser.parse_from_lexer lexer in
 
-  if options.validate then 
-    ()
-  else
+  if options.parse then begin
+    Logs.info (fun m -> m "%s" (Ast.show_program program));
+    exit(0)
+  end;
 
-  if options.tacky then
-    ()
-  else
+  if options.validate then begin 
+    let vir = 
+      Variables_resolver.resolve program 
+      |> Label_resolver.resolve
+      |> Loop_switch_labeler.resolve in
+    Logs.info (fun m -> m "%s" (Vir.show_program vir));
+    exit(0)
+  end;
 
-  if options.codegen then
+  if options.tacky then begin
     ()
-  else
+  end;
+
+  if options.codegen then begin
+    ()
+  end;
 
   ()
 

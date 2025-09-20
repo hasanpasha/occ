@@ -1,3 +1,6 @@
+let src = Logs.Src.create "occ.parser" ~doc:"logs occ's parser events"
+module Log = (val Logs.src_log src : Logs.LOG)
+
 type t =
 {
   lexer: Lexer.t;
@@ -32,14 +35,19 @@ let advance parser =
   let cur = peek in
   let lexer, peek = Lexer.next_token lexer in
   { lexer; cur; peek }
-
+  
 let init (lexer: Lexer.t) : t =
   let parser = { lexer = lexer; cur = None; peek = None } in
   let parser = advance parser in
   let parser = advance parser in
   parser
 
-let rec program parser : Ast.program =
+
+let rec parse_from_lexer lexer =
+  let parser = init lexer in
+  program parser
+
+and program parser : Ast.program =
   let rec program' parser decls =
     match parser.cur with
     | Some _ -> 
@@ -48,7 +56,7 @@ let rec program parser : Ast.program =
     | None -> parser, decls
   in
   let _, decls = program' parser [] in
-  decls
+  List.rev decls
 
 and declaration parser =
   let parser, type' = expect parser Token.Int in
@@ -106,6 +114,7 @@ and block_item parser =
   | None -> failwith "unexpected end of token stream"
 
 and statement parser =
+  Log.debug (fun m -> m "current: %s, peek: %s" (Token.show_opt_t parser.cur) (Token.show_opt_t parser.peek));
   let open Token in
   match parser.cur with
   | Some Return -> return_stmt parser
@@ -179,7 +188,7 @@ and break_stmt parser =
 and continue_stmt parser = 
   let parser = consume parser Token.Continue in
   let parser = consume parser Token.Semi in
-  parser, Ast.Break
+  parser, Ast.Continue
 
 and while_stmt parser =
   let parser = consume parser Token.While in

@@ -1,5 +1,5 @@
 (library
- (modules token lexer ast parser)
+ (modules token lexer ast parser vir variables_resolver label_resolver loop_switch_labeler)
  (preprocess (pps ppx_deriving.show ppx_deriving.eq ppx_deriving.enum))
  (libraries logs logs.fmt)
  (name occ))

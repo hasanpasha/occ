@@ -25,16 +25,16 @@ and statement =
 |Null
 |If of { cond: expression; then': statement; else': statement option }
 |Goto of ident
-|LabeledStmt of { label: ident; stmt: statement }
+|LabeledStmt of { stmt: statement; label: ident }
 |Compound of block
-|Break
-|Continue
-|While of { cond: expression; body: statement }
-|DoWhile of {  body: statement; cond: expression }
-|For of { init: for_init; cond: expression option; post: expression option; body: statement }
-|Switch of { expr: expression; stmt: statement }
-|Case of { expr: expression; stmt: statement option }
-|Default of statement option
+|Break of ident
+|Continue of ident
+|While of { cond: expression; body: statement; label: ident }
+|DoWhile of {  body: statement; cond: expression; label: ident }
+|For of { init: for_init; cond: expression option; post: expression option; body: statement; label: ident }
+|Switch of { expr: expression; stmt: statement; label: ident; cases: (expression * ident) list; default: ident option }
+|Case of { expr: expression; stmt: statement option; label: ident }
+|Default of { stmt: statement option; label: ident }
 
 and for_init =
 |Decl of declaration

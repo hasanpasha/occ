@@ -63,3 +63,6 @@ type t =
 |Int
 |Void
 [@@deriving show, eq]
+
+type opt_t = t option
+[@@deriving show, eq]
