@@ -1,1 +1,1 @@
-./book_test --chapter 8 --extra-credit --stage tacky
+./book_test --extra-credit --chapter 8
