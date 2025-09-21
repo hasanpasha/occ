@@ -1,7 +1,3 @@
-int main(void)
-{
-    for (int i = 0; i < 10; i++) {
-        return i;
-        break;
-    }
+int main(void) {
+    return 3 == 1 != 2;
 }

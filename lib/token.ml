@@ -1,68 +1,64 @@
 type t =
-(* identifier *)
-|Ident of string
-|IntLit of int
-
-(* symbols *)
-|LParen
-|RParen
-|LCub
-|RCub
-|Semi
-|Tilde
-|Excl
-|Plus
-|PlusPlus
-|PlusEqual
-|Minus
-|MinusMinus
-|MinusEqual
-|Astrsk
-|AstrskEqual
-|Slash
-|SlashEqual
-|Percnt
-|PercntEqual
-|Amp
-|AmpAmp
-|AmpEqual
-|Hat
-|HatEqual
-|Verbar
-|VerbarVarbar
-|VerbarEqual
-|Lt
-|LtLt
-|LtEqual
-|LtLtEqual
-|Gt
-|GtGt
-|GtEqual
-|GtGtEqual
-|Equal
-|EqualEqual
-|ExclEqual
-|Quest
-|Colon
-
-(* keywords *)
-|Return
-|If
-|Else
-|Goto
-|While
-|Do
-|For
-|Break
-|Continue
-|Switch
-|Case
-|Default
-
-(* types *)
-|Int
-|Void
+  (* identifier *)
+  | Ident of string
+  | IntLit of int
+  (* symbols *)
+  | LParen
+  | RParen
+  | LCub
+  | RCub
+  | Semi
+  | Tilde
+  | Excl
+  | Plus
+  | PlusPlus
+  | PlusEqual
+  | Minus
+  | MinusMinus
+  | MinusEqual
+  | Astrsk
+  | AstrskEqual
+  | Slash
+  | SlashEqual
+  | Percnt
+  | PercntEqual
+  | Amp
+  | AmpAmp
+  | AmpEqual
+  | Hat
+  | HatEqual
+  | Verbar
+  | VerbarVarbar
+  | VerbarEqual
+  | Lt
+  | LtLt
+  | LtEqual
+  | LtLtEqual
+  | Gt
+  | GtGt
+  | GtEqual
+  | GtGtEqual
+  | Equal
+  | EqualEqual
+  | ExclEqual
+  | Quest
+  | Colon
+  (* keywords *)
+  | Return
+  | If
+  | Else
+  | Goto
+  | While
+  | Do
+  | For
+  | Break
+  | Continue
+  | Switch
+  | Case
+  | Default
+  (* types *)
+  | Int
+  | Void
 [@@deriving show, eq]
 
-type opt_t = t option
-[@@deriving show, eq]
+type opt_t = t option [@@deriving show, eq]

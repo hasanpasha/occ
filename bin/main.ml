@@ -1,75 +1,86 @@
 open Occ
 open Cmdliner
 
-type options =
-{
-  verbose: bool;
-  lex: bool;
-  parse: bool;
-  validate: bool;
-  tacky: bool;
-  codegen: bool;
-  input: string
+type options = {
+  verbose : bool;
+  lex : bool;
+  parse : bool;
+  validate : bool;
+  tacky : bool;
+  codegen : bool;
+  arch : Air_lower.arch;
+  input : string;
 }
 
 let replace_extension filename new_ext =
   try
     let base = Filename.chop_extension filename in
     base ^ "." ^ new_ext
-  with Invalid_argument _ ->
-    filename ^ "." ^ new_ext
+  with Invalid_argument _ -> filename ^ "." ^ new_ext
 
-let occ (options: options) =
+let occ (options : options) =
   Logs.set_reporter (Logs_fmt.reporter ());
 
-  if options.verbose then
-    Logs.set_level (Some Logs.Debug)
-  else 
-    Logs.set_level (Some Logs.Info);
+  if options.verbose then Logs.set_level (Some Logs.Debug)
+  else Logs.set_level (Some Logs.Info);
 
   let cc = replace_extension options.input "cc" in
-  
-  let expand_cmd_code = Sys.command (Printf.sprintf "gcc -P -E %s -o %s" options.input cc) in
-  if expand_cmd_code != 0 then
-    exit(expand_cmd_code)
+
+  let expand_cmd_code =
+    Sys.command (Printf.sprintf "gcc -P -E %s -o %s" options.input cc)
+  in
+  if expand_cmd_code != 0 then exit expand_cmd_code
   else
-    
-  let input = In_channel.with_open_text cc In_channel.input_all in
-  
-  let lexer = Lexer.init input in
+    let input = In_channel.with_open_text cc In_channel.input_all in
 
-  if options.lex then begin
-    let seq = Lexer.lex lexer in
-    Seq.iter  (fun tok -> Logs.info (fun m -> m "%s" (Token.show tok))) seq;
-    exit(0)
-  end;
-    
-  let program = Parser.parse_from_lexer lexer in
+    let lexer = Lexer.init input in
 
-  if options.parse then begin
-    Logs.info (fun m -> m "%s" (Ast.show program));
-    exit(0)
-  end;
+    if options.lex then (
+      let seq = Lexer.lex lexer in
+      Seq.iter (fun tok -> Logs.info (fun m -> m "%s" (Token.show tok))) seq;
+      exit 0);
 
-  let vir = Validate.validate program in
+    let program = Parser.parse_from_lexer lexer in
 
-  if options.validate then begin 
-    Logs.info (fun m -> m "%s" (Vir.show vir));
-    exit(0)
-  end;
+    if options.parse then (
+      Logs.info (fun m -> m "%s" (Ast.show program));
+      exit 0);
 
-  let ir = Tacky_ir_lower.lower vir in
+    let vir = Validate.validate program in
 
-  if options.tacky then begin
-    Logs.info (fun m -> m "%s" (Tacky_ir.show ir));
-    exit(0)
-  end;
+    if options.validate then (
+      Logs.info (fun m -> m "%s" (Vir.show vir));
+      exit 0);
 
-  if options.codegen then begin
-    ()
-  end;
+    let ir = Tacky_ir_lower.lower vir in
 
-  ()
+    if options.tacky then (
+      Logs.info (fun m -> m "%s" (Tacky_ir.show ir));
+      exit 0);
+
+    let air = Air_lower.lower ir options.arch in
+
+    if options.codegen then (
+      Logs.info (fun m -> m "%s" (Air.show air));
+      exit 0);
+
+    let s = replace_extension options.input "s" in
+    Out_channel.with_open_text s (fun oc -> output_string oc (Air.emit air));
+
+    let exe = Filename.chop_extension options.input in
+    let compile_cmd_code = Sys.command (Printf.sprintf "gcc %s -o %s" s exe) in
+    if compile_cmd_code != 0 then exit compile_cmd_code
+
+let arch_conv : Air_lower.arch Arg.conv =
+  let parse = function
+    | "x86_64" -> `Ok Air_lower.X86_64
+    | s -> `Error ("Unknown architecture: " ^ s)
+  in
+  let print fmt a =
+    let s = match a with Air_lower.X86_64 -> "x86_64" in
+    Format.fprintf fmt "%s" s
+  in
+  (parse, print)
 
 let occ_cmd =
   let input =
@@ -77,32 +88,44 @@ let occ_cmd =
     Arg.(required & pos 0 (some file) None & info [] ~docv:"INPUT" ~doc)
   in
   let verbose =
-    Arg.(value & flag & info ["verbose"] ~docv:"VEROSE" ~doc:"Print all messages")
+    Arg.(
+      value & flag & info [ "verbose" ] ~docv:"VEROSE" ~doc:"Print all messages")
   in
   let lex =
-    Arg.(value & flag & info ["lex"] ~docv:"LEX" ~doc:"lex and exit")
+    Arg.(value & flag & info [ "lex" ] ~docv:"LEX" ~doc:"lex and exit")
   in
   let parse =
-    Arg.(value & flag & info ["parse"] ~docv:"PARSE" ~doc:"parse and exit")
+    Arg.(value & flag & info [ "parse" ] ~docv:"PARSE" ~doc:"parse and exit")
   in
   let validate =
-    Arg.(value & flag & info ["validate"] ~docv:"VALIDATE" ~doc:"validate and exit")
+    Arg.(
+      value & flag
+      & info [ "validate" ] ~docv:"VALIDATE" ~doc:"validate and exit")
   in
   let tacky =
-    Arg.(value & flag & info ["tacky"] ~docv:"TACKY" ~doc:"generate tacky ir and exit")
+    Arg.(
+      value & flag
+      & info [ "tacky" ] ~docv:"TACKY" ~doc:"generate tacky ir and exit")
   in
   let codegen =
-    Arg.(value & flag & info ["codegen"] ~docv:"CODEGEN" ~doc:"generate asm and exit without emit")
+    Arg.(
+      value & flag
+      & info [ "codegen" ] ~docv:"CODEGEN"
+          ~doc:"generate asm and exit without emit")
+  in
+  let arch =
+    let doc = "target architecture (x86_64)" in
+    Arg.(value & opt arch_conv Air_lower.X86_64 & info [ "t"; "target" ] ~doc)
   in
   let opts_term =
-  Term.(const (fun verbose lex parse validate tacky codegen input ->
-      { verbose; lex; parse; validate; tacky; codegen; input })
-    $ verbose $ lex $ parse $ validate $ tacky $ codegen $ input)
+    Term.(
+      const (fun verbose lex parse validate tacky codegen arch input ->
+          { verbose; lex; parse; validate; tacky; codegen; arch; input })
+      $ verbose $ lex $ parse $ validate $ tacky $ codegen $ arch $ input)
   in
   let doc = "Compile a subset of c language program using occ compiler" in
-  let man = [
-    `S Manpage.s_bugs;
-    `P "Email bug reports to <bashahsn22@gmail.com>." ]
+  let man =
+    [ `S Manpage.s_bugs; `P "Email bug reports to <bashahsn22@gmail.com>." ]
   in
   let term = Term.(const occ $ opts_term) in
   Cmd.v (Cmd.info "occ" ~version:"0.1.0" ~doc ~man) term

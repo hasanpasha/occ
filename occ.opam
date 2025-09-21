@@ -2,6 +2,7 @@
 opam-version: "2.0"
 synopsis: "C compiler"
 description: "A C programming language compiler"
+maintainer: ["Hasan Pasha <bashahsn22@gmail.com>"]
 authors: ["Hasan Pasha <bashahsn22@gmail.com>"]
 license: "LICENSE"
 tags: ["C" "programming" "language" "compiler" "your" "project"]
@@ -14,6 +15,7 @@ depends: [
   "logs"
   "fmt"
   "ppx_deriving"
+  "ppx_string"
   "odoc" {with-doc}
 ]
 build: [

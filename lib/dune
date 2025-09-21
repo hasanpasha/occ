@@ -1,6 +1,8 @@
 (include_subdirs qualified)
+
 (library
  ; (modules token lexer ast parser vir validate)
- (preprocess (pps ppx_deriving.show ppx_deriving.eq ppx_deriving.enum))
+ (preprocess
+  (pps ppx_deriving.show ppx_deriving.eq ppx_deriving.enum ppx_string))
  (libraries logs logs.fmt)
  (name occ))
