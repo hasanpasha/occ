@@ -11,8 +11,8 @@ type t = {
   switch_label : string option;
   kind : kind option;
   counter : int ref;
-  cases : (Vir.expression * Vir.ident) list option ref;
-  default : Vir.ident option ref;
+  cases : (Ast.expression * Ast.ident) list option ref;
+  default : Ast.ident option ref;
 }
 
 let init =
@@ -29,18 +29,18 @@ let rec resolve program = List.map resolve_declaration program
 
 and resolve_declaration decl =
   match decl with
-  | Vir.Function { name; body } ->
+  | Ast.Function { name; body } ->
       let state = init in
-      Vir.Function { name; body = resolve_block body state }
+      Ast.Function { name; body = resolve_block body state }
   | _ -> decl
 
-and resolve_block (blk : Vir.block) state =
+and resolve_block (blk : Ast.block) state =
   List.map (fun item -> resolve_block_item item state) blk
 
-and resolve_block_item (item : Vir.block_item) state =
+and resolve_block_item (item : Ast.block_item) state =
   match item with
-  | Vir.Decl _ -> item
-  | Vir.Stmt stmt -> Vir.Stmt (resolve_statement stmt state)
+  | Ast.Decl _ -> item
+  | Ast.Stmt stmt -> Ast.Stmt (resolve_statement stmt state)
 
 and resolve_statement stmt state =
   let copy_state_with_loop_lbl
@@ -57,28 +57,28 @@ and resolve_statement stmt state =
   in
 
   match stmt with
-  | Vir.If { cond; then'; else' } ->
-      Vir.If
+  | Ast.If { cond; then'; else' } ->
+      Ast.If
         {
           cond;
           then' = resolve_statement then' state;
           else' = Option.map (fun stmt -> resolve_statement stmt state) else';
         }
-  | Vir.LabeledStmt { label; stmt } ->
-      Vir.LabeledStmt { stmt = resolve_statement stmt state; label }
-  | Vir.Compound blk -> Vir.Compound (resolve_block blk state)
-  | Vir.While { cond; body; label = _ } ->
+  | Ast.LabeledStmt { label; stmt } ->
+      Ast.LabeledStmt { stmt = resolve_statement stmt state; label }
+  | Ast.Compound blk -> Ast.Compound (resolve_block blk state)
+  | Ast.While { cond; body; label = _ } ->
       let unique = make_unique "while" state.counter in
       let state' = copy_state_with_loop_lbl state unique Loop in
-      Vir.While { cond; body = resolve_statement body state'; label = unique }
-  | Vir.DoWhile { body; cond; label = _ } ->
+      Ast.While { cond; body = resolve_statement body state'; label = unique }
+  | Ast.DoWhile { body; cond; label = _ } ->
       let unique = make_unique "do_while" state.counter in
       let state' = copy_state_with_loop_lbl state unique Loop in
-      Vir.DoWhile { body = resolve_statement body state'; cond; label = unique }
-  | Vir.For { init; cond; post; body; label = _ } ->
+      Ast.DoWhile { body = resolve_statement body state'; cond; label = unique }
+  | Ast.For { init; cond; post; body; label = _ } ->
       let unique = make_unique "for" state.counter in
       let state' = copy_state_with_loop_lbl state unique Loop in
-      Vir.For
+      Ast.For
         {
           init;
           cond;
@@ -86,22 +86,22 @@ and resolve_statement stmt state =
           body = resolve_statement body state';
           label = unique;
         }
-  | Vir.Break _ -> (
+  | Ast.Break _ -> (
       Log.debug (fun m -> m "resolving break stmt");
       match state.kind with
-      | Some Loop -> Vir.Break (Option.get state.loop_label)
-      | Some Switch -> Vir.Break (Option.get state.switch_label)
+      | Some Loop -> Ast.Break (Option.get state.loop_label)
+      | Some Switch -> Ast.Break (Option.get state.switch_label)
       | _ ->
           failwith "break statement must be inside a loop or switch statement")
-  | Vir.Continue _ -> (
+  | Ast.Continue _ -> (
       Log.debug (fun m -> m "resolving continue stmt");
       match state.loop_label with
-      | Some name -> Vir.Continue name
+      | Some name -> Ast.Continue name
       | None ->
           failwith
             (Printf.sprintf "continue statement must be inside a loop statement")
       )
-  | Vir.Switch { expr; stmt; label = _; cases = _; default = _ } ->
+  | Ast.Switch { expr; stmt; label = _; cases = _; default = _ } ->
       let unique = make_unique "switch" state.counter in
       let state =
         {
@@ -120,7 +120,7 @@ and resolve_statement stmt state =
 
       List.iter
         (fun (expr, label) ->
-          Log.debug (fun m -> m "%s: %s" label (Vir.show_expression expr)))
+          Log.debug (fun m -> m "%s: %s" label (Ast.show_expression expr)))
         cases;
 
       let check_no_duplicate cases =
@@ -129,7 +129,7 @@ and resolve_statement stmt state =
           | (x_expr, _) :: xs ->
               if List.exists (fun (y_expr, _) -> x_expr = y_expr) xs then
                 failwith
-                  ("multiple case with same expr: " ^ Vir.show_expression x_expr)
+                  ("multiple case with same expr: " ^ Ast.show_expression x_expr)
               else aux xs
         in
         aux cases
@@ -137,9 +137,9 @@ and resolve_statement stmt state =
 
       check_no_duplicate cases;
 
-      Vir.Switch
+      Ast.Switch
         { expr; stmt; label = unique; cases; default = !(state.default) }
-  | Vir.Case { expr = Vir.IntLit value; stmt; label = _ } ->
+  | Ast.Case { expr = Ast.IntLit value; stmt; label = _ } ->
       let switch_label =
         match state.switch_label with
         | Some label -> label
@@ -147,20 +147,20 @@ and resolve_statement stmt state =
             failwith "case statement must be inside a switch statement body"
       in
       let label = make_switch_case switch_label state.counter in
-      let expr = Vir.IntLit value in
+      let expr = Ast.IntLit value in
 
       let current_cases = !(state.cases) |> Option.get in
       let new_cases = (expr, label) :: current_cases in
       state.cases := Some new_cases;
 
-      Vir.Case
+      Ast.Case
         {
           expr;
           stmt = Option.map (fun stmt -> resolve_statement stmt state) stmt;
           label;
         }
-  | Vir.Case _ -> failwith "case expr must be a constant"
-  | Vir.Default { stmt; label = _ } ->
+  | Ast.Case _ -> failwith "case expr must be a constant"
+  | Ast.Default { stmt; label = _ } ->
       let switch_label =
         match state.switch_label with
         | Some label -> label
@@ -175,7 +175,7 @@ and resolve_statement stmt state =
             "switch statement can't have more than two default statements"
       | None -> state.default := Some label);
 
-      Vir.Default
+      Ast.Default
         {
           stmt = Option.map (fun stmt -> resolve_statement stmt state) stmt;
           label;

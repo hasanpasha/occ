@@ -185,12 +185,12 @@ and compound_stmt parser =
 and break_stmt parser =
   let parser = consume parser Token.Break in
   let parser = consume parser Token.Semi in
-  (parser, Ast.Break)
+  (parser, Ast.Break "")
 
 and continue_stmt parser =
   let parser = consume parser Token.Continue in
   let parser = consume parser Token.Semi in
-  (parser, Ast.Continue)
+  (parser, Ast.Continue "")
 
 and while_stmt parser =
   let parser = consume parser Token.While in
@@ -200,7 +200,7 @@ and while_stmt parser =
   let parser = consume parser Token.RParen in
 
   let parser, body = statement parser in
-  (parser, Ast.While { cond; body })
+  (parser, Ast.While { cond; body; label = "" })
 
 and do_while_stmt parser =
   let parser = consume parser Token.Do in
@@ -213,7 +213,7 @@ and do_while_stmt parser =
   let parser = consume parser Token.RParen in
   let parser = consume parser Token.Semi in
 
-  (parser, Ast.DoWhile { body; cond })
+  (parser, Ast.DoWhile { body; cond; label = "" })
 
 and for_stmt parser =
   let parser = consume parser Token.For in
@@ -248,7 +248,7 @@ and for_stmt parser =
   in
   let parser = consume parser Token.RParen in
   let parser, body = statement parser in
-  (parser, Ast.For { init; cond; post; body })
+  (parser, Ast.For { init; cond; post; body; label = "" })
 
 and switch_stmt parser =
   let parser = consume parser Token.Switch in
@@ -256,7 +256,7 @@ and switch_stmt parser =
   let parser, expr = expression parser in
   let parser = consume parser Token.RParen in
   let parser, stmt = statement parser in
-  (parser, Ast.Switch { expr; stmt })
+  (parser, Ast.Switch { expr; stmt; label = ""; cases = []; default = None })
 
 and case_stmt parser =
   let parser = consume parser Token.Case in
@@ -269,7 +269,7 @@ and case_stmt parser =
         let parser, stmt = statement parser in
         (parser, Some stmt)
   in
-  (parser, Ast.Case { expr; stmt })
+  (parser, Ast.Case { expr; stmt; label = "" })
 
 and default_stmt parser =
   let parser = consume parser Token.Default in
@@ -281,7 +281,7 @@ and default_stmt parser =
         let parser, stmt = statement parser in
         (parser, Some stmt)
   in
-  (parser, Ast.Default stmt)
+  (parser, Ast.Default { stmt; label = "" })
 
 and expression parser = expression_prec parser Assignment
 

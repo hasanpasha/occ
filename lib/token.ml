@@ -43,6 +43,7 @@ type t =
   | ExclEqual
   | Quest
   | Colon
+  | Comma
   (* keywords *)
   | Return
   | If

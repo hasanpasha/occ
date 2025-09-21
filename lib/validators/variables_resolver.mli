@@ -1,1 +1,1 @@
-val resolve : Ast.t -> Vir.t
+val resolve : Ast.t -> Ast.t

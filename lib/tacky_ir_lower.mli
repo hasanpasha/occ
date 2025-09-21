@@ -1,1 +1,1 @@
-val lower : Vir.t -> Tacky_ir.t
+val lower : Ast.t -> Tacky_ir.t

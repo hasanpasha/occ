@@ -84,6 +84,7 @@ and next_token lexer =
         | '=' -> sym1 Equal
         | '?' -> sym1 Quest
         | ':' -> sym1 Colon
+        | ',' -> sym1 Comma
         | _ when is_identifier_start ch -> lex_identifier lexer
         | _ when Char.is_digit ch -> lex_number lexer
         | _ ->

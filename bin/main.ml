@@ -8,6 +8,7 @@ type options = {
   validate : bool;
   tacky : bool;
   codegen : bool;
+  compile : bool;
   arch : Air_lower.arch;
   input : string;
 }
@@ -49,7 +50,7 @@ let occ (options : options) =
     let vir = Validate.validate program in
 
     if options.validate then (
-      Logs.info (fun m -> m "%s" (Vir.show vir));
+      Logs.info (fun m -> m "%s" (Ast.show vir));
       exit 0);
 
     let ir = Tacky_ir_lower.lower vir in
@@ -67,9 +68,13 @@ let occ (options : options) =
     let s = replace_extension options.input "s" in
     Out_channel.with_open_text s (fun oc -> output_string oc (Air.emit air));
 
+    let obj = replace_extension options.input "o" in
+    if Sys.command (Printf.sprintf "gcc -c %s -o %s" s obj) != 0 then exit 1;
+
+    if options.compile then exit 0;
+
     let exe = Filename.chop_extension options.input in
-    let compile_cmd_code = Sys.command (Printf.sprintf "gcc %s -o %s" s exe) in
-    if compile_cmd_code != 0 then exit compile_cmd_code
+    if Sys.command (Printf.sprintf "gcc %s -o %s" obj exe) != 0 then exit 1
 
 let arch_conv : Air_lower.arch Arg.conv =
   let parse = function
@@ -113,15 +118,32 @@ let occ_cmd =
       & info [ "codegen" ] ~docv:"CODEGEN"
           ~doc:"generate asm and exit without emit")
   in
+  let compile =
+    Arg.(
+      value & flag
+      & info [ "compile" ] ~docv:"COMPILE"
+          ~doc:"compile asm to object file and exit without linking")
+  in
   let arch =
     let doc = "target architecture (x86_64)" in
     Arg.(value & opt arch_conv Air_lower.X86_64 & info [ "t"; "target" ] ~doc)
   in
   let opts_term =
     Term.(
-      const (fun verbose lex parse validate tacky codegen arch input ->
-          { verbose; lex; parse; validate; tacky; codegen; arch; input })
-      $ verbose $ lex $ parse $ validate $ tacky $ codegen $ arch $ input)
+      const (fun verbose lex parse validate tacky codegen compile arch input ->
+          {
+            verbose;
+            lex;
+            parse;
+            validate;
+            tacky;
+            codegen;
+            compile;
+            arch;
+            input;
+          })
+      $ verbose $ lex $ parse $ validate $ tacky $ codegen $ compile $ arch
+      $ input)
   in
   let doc = "Compile a subset of c language program using occ compiler" in
   let man =

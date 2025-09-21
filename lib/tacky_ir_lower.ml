@@ -10,47 +10,47 @@ let (|??) (opt: 'a option) (default: 'a) : 'a =
   | Some v -> v
   | None -> default *)
 
-let rec lower (program : Vir.t) : t =
+let rec lower (program : Ast.t) : t =
   List.map
     (fun decl : function' ->
       match decl with
-      | Vir.Function { name; body } ->
+      | Ast.Function { name; body } ->
           let counter = ref 0 in
           let instructions = lower_block body counter in
           let instructions = instructions @ [ Return (Constant 0) ] in
           { name; instructions }
-      | Vir.Variable _ ->
+      | Ast.Variable _ ->
           failwith "top level variable declaration are not supported yet")
     program
 
 and lower_declaration decl counter =
   match decl with
-  | Vir.Variable { name; init } -> (
+  | Ast.Variable { name; init } -> (
       match init with
       | Some expr ->
           let value, instrs = lower_expression expr counter in
           instrs @ [ Copy { src = value; dst = Variable name } ]
       | None -> [])
-  | Vir.Function _ -> []
+  | Ast.Function _ -> []
 
 and lower_block blk counter =
   List.concat (List.map (fun item -> lower_block_item item counter) blk)
 
 and lower_block_item item counter =
   match item with
-  | Vir.Decl decl -> lower_declaration decl counter
-  | Vir.Stmt stmt -> lower_statement stmt counter
+  | Ast.Decl decl -> lower_declaration decl counter
+  | Ast.Stmt stmt -> lower_statement stmt counter
 
 and lower_statement stmt counter =
   match stmt with
-  | Vir.Return expr ->
+  | Ast.Return expr ->
       let value, instrs = lower_expression expr counter in
       instrs @ [ Return value ]
-  | Vir.Expr expr ->
+  | Ast.Expr expr ->
       let _, instrs = lower_expression expr counter in
       instrs
-  | Vir.Null -> []
-  | Vir.If { cond; then'; else' } -> (
+  | Ast.Null -> []
+  | Ast.If { cond; then'; else' } -> (
       let cond_value, cond_instrs = lower_expression cond counter in
       let then_instrs = lower_statement then' counter in
       let end_lbl = make_unique "end" counter in
@@ -67,12 +67,12 @@ and lower_statement stmt counter =
           cond_instrs
           @ [ JumpIfZero { cond = cond_value; target = end_lbl } ]
           @ then_instrs @ [ Label end_lbl ])
-  | Vir.Compound blk -> lower_block blk counter
-  | Vir.Goto target -> [ Jump target ]
-  | Vir.LabeledStmt { stmt; label } ->
+  | Ast.Compound blk -> lower_block blk counter
+  | Ast.Goto target -> [ Jump target ]
+  | Ast.LabeledStmt { stmt; label } ->
       let instrs = lower_statement stmt counter in
       Label label :: instrs
-  | Vir.While { cond; body; label } ->
+  | Ast.While { cond; body; label } ->
       let cond_value, cond_instrs = lower_expression cond counter in
       let break_label = make_break_label label in
       let continue_label = make_continue_label label in
@@ -80,7 +80,7 @@ and lower_statement stmt counter =
       @ [ JumpIfZero { cond = cond_value; target = break_label } ]
       @ lower_statement body counter
       @ [ Jump continue_label; Label break_label ]
-  | Vir.DoWhile { body; cond; label } ->
+  | Ast.DoWhile { body; cond; label } ->
       let cond_value, cond_instrs = lower_expression cond counter in
       let start_label = Printf.sprintf "start.%s" label in
       let break_label = make_break_label label in
@@ -92,17 +92,17 @@ and lower_statement stmt counter =
           JumpIfNotZero { cond = cond_value; target = start_label };
           Label break_label;
         ]
-  | Vir.For { init; cond; post; body; label } ->
+  | Ast.For { init; cond; post; body; label } ->
       let start_label = Printf.sprintf "start.%s" label in
       let break_label = make_break_label label in
       let continue_label = make_continue_label label in
 
       (match init with
-      | Vir.Decl decl -> lower_declaration decl counter
-      | Vir.Expr (Some expr) ->
+      | Ast.Decl decl -> lower_declaration decl counter
+      | Ast.Expr (Some expr) ->
           let _, instrs = lower_expression expr counter in
           instrs
-      | Vir.Expr None -> [])
+      | Ast.Expr None -> [])
       @ [ Label start_label ]
       @ (match cond with
         | Some expr ->
@@ -117,9 +117,9 @@ and lower_statement stmt counter =
             instrs
         | None -> [])
       @ [ Jump start_label; Label break_label ]
-  | Vir.Break lbl -> [ Jump (make_break_label lbl) ]
-  | Vir.Continue lbl -> [ Jump (make_continue_label lbl) ]
-  | Vir.Switch { expr; stmt; label; cases; default } ->
+  | Ast.Break lbl -> [ Jump (make_break_label lbl) ]
+  | Ast.Continue lbl -> [ Jump (make_continue_label lbl) ]
+  | Ast.Switch { expr; stmt; label; cases; default } ->
       let break_label = make_break_label label in
       let value, instrs = lower_expression expr counter in
       instrs
@@ -144,18 +144,16 @@ and lower_statement stmt counter =
         | None -> [ Jump break_label ])
       @ lower_statement stmt counter
       @ [ Label break_label ]
-  | Vir.Case { expr = _; stmt; label } | Vir.Default { stmt; label } -> (
+  | Ast.Case { expr = _; stmt; label } | Ast.Default { stmt; label } -> (
       [ Label label ]
       @ match stmt with Some stmt -> lower_statement stmt counter | None -> [])
 
-and lower_expression (expr : Vir.expression) (counter : int ref) :
+and lower_expression (expr : Ast.expression) (counter : int ref) :
     value * instruction list =
   match expr with
-  | Vir.IntLit value ->
-      Printf.printf "int_lit %d\n" value;
-      (Constant value, [])
-  | Vir.LeftUnary { operator = Plus; rhs } -> lower_expression rhs counter
-  | Vir.LeftUnary { operator = (PlusPlus | MinusMinus) as operator; rhs } ->
+  | Ast.IntLit value -> (Constant value, [])
+  | Ast.LeftUnary { operator = Plus; rhs } -> lower_expression rhs counter
+  | Ast.LeftUnary { operator = (PlusPlus | MinusMinus) as operator; rhs } ->
       let operator =
         match operator with
         | PlusPlus -> Add
@@ -172,7 +170,7 @@ and lower_expression (expr : Vir.expression) (counter : int ref) :
               { operator; src1 = src_value; src2 = Constant 1; dst = src_value };
             Copy { src = src_value; dst };
           ] )
-  | Vir.LeftUnary { operator; rhs } ->
+  | Ast.LeftUnary { operator; rhs } ->
       let operator =
         match operator with
         | Tilde -> Complement
@@ -184,7 +182,7 @@ and lower_expression (expr : Vir.expression) (counter : int ref) :
       let dst = make_temp_var counter in
 
       (dst, src_instrs @ [ Unary { operator; src; dst } ])
-  | Vir.RightUnary { operator = (PlusPlus | MinusMinus) as operator; lhs } ->
+  | Ast.RightUnary { operator = (PlusPlus | MinusMinus) as operator; lhs } ->
       let operator =
         match operator with
         | PlusPlus -> Add
@@ -200,8 +198,8 @@ and lower_expression (expr : Vir.expression) (counter : int ref) :
             Copy { src; dst };
             Binary { operator; src1 = src; src2 = Constant 1; dst = src };
           ] )
-  | Vir.RightUnary _ -> failwith "unhandled suffix unary"
-  | Vir.Binary { operator = AmpAmp; lhs; rhs } ->
+  | Ast.RightUnary _ -> failwith "unhandled suffix unary"
+  | Ast.Binary { operator = AmpAmp; lhs; rhs } ->
       let dst = make_temp_var counter in
       let false_label = make_unique "false" counter in
       let end_label = make_unique "end" counter in
@@ -219,7 +217,7 @@ and lower_expression (expr : Vir.expression) (counter : int ref) :
             Copy { src = Constant 0; dst };
             Label end_label;
           ] )
-  | Vir.Binary { operator = VerbarVarbar; lhs; rhs } ->
+  | Ast.Binary { operator = VerbarVarbar; lhs; rhs } ->
       let dst = make_temp_var counter in
       let true_label = make_unique "true" counter in
       let end_label = make_unique "end" counter in
@@ -237,7 +235,7 @@ and lower_expression (expr : Vir.expression) (counter : int ref) :
             Copy { src = Constant 1; dst };
             Label end_label;
           ] )
-  | Vir.Binary { operator; lhs; rhs } ->
+  | Ast.Binary { operator; lhs; rhs } ->
       let operator =
         match operator with
         | Plus -> Add
@@ -262,16 +260,13 @@ and lower_expression (expr : Vir.expression) (counter : int ref) :
       let src1, src1_instrs = lower_expression lhs counter in
       let src2, src2_instrs = lower_expression rhs counter in
 
-      Printf.printf "lhs = %s\n" (show_value src1);
-      Printf.printf "rhs = %s\n" (show_value src2);
-
       (dst, src1_instrs @ src2_instrs @ [ Binary { operator; src1; src2; dst } ])
-  | Vir.Var name -> (Variable name, [])
-  | Vir.Assignment { operator = Equal; lhs; rhs } ->
+  | Ast.Var name -> (Variable name, [])
+  | Ast.Assignment { operator = Equal; lhs; rhs } ->
       let src, src_instrs = lower_expression rhs counter in
       let dst, _ = lower_expression lhs counter in
       (dst, src_instrs @ [ Copy { src; dst } ])
-  | Vir.Assignment { operator; lhs; rhs } ->
+  | Ast.Assignment { operator; lhs; rhs } ->
       let operator =
         match operator with
         | PlusEqual -> Add
@@ -289,7 +284,7 @@ and lower_expression (expr : Vir.expression) (counter : int ref) :
       let src, src_instrs = lower_expression rhs counter in
       let dst, _ = lower_expression lhs counter in
       (dst, src_instrs @ [ Binary { operator; src1 = dst; src2 = src; dst } ])
-  | Vir.Conditional { cond; true'; false' } ->
+  | Ast.Conditional { cond; true'; false' } ->
       let dst = make_temp_var counter in
       let else_label = make_unique "else" counter in
       let end_label = make_unique "end" counter in
