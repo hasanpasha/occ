@@ -15,7 +15,7 @@ let rec resolve program =
   let state = init in
   resolve_program program state
 
-and resolve_program (program: Vir.program) (state: t) : (Vir.program) =
+and resolve_program (program: Vir.t) (state: t) : (Vir.t) =
   List.map (fun decl -> resolve_declaration decl state) program
 
 and resolve_declaration decl state =

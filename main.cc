@@ -1,7 +1,7 @@
 int main(void)
 {
-    for (i = 0; i < 1; i = i + 1)
-    {
-        return 0;
+    for (int i = 0; i < 10; i++) {
+        return i;
+        break;
     }
 }

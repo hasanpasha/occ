@@ -47,18 +47,22 @@ let occ (options: options) =
   let program = Parser.parse_from_lexer lexer in
 
   if options.parse then begin
-    Logs.info (fun m -> m "%s" (Ast.show_program program));
+    Logs.info (fun m -> m "%s" (Ast.show program));
     exit(0)
   end;
+
+  let vir = Validate.validate program in
 
   if options.validate then begin 
-    let vir = Validate.validate program in
-    Logs.info (fun m -> m "%s" (Vir.show_program vir));
+    Logs.info (fun m -> m "%s" (Vir.show vir));
     exit(0)
   end;
 
+  let ir = Tacky_ir_lower.lower vir in
+
   if options.tacky then begin
-    ()
+    Logs.info (fun m -> m "%s" (Tacky_ir.show ir));
+    exit(0)
   end;
 
   if options.codegen then begin

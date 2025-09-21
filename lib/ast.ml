@@ -1,13 +1,4 @@
-type t =
-|Program of program
-|Declaration of declaration
-|Block of block
-|BlockItem of block_item
-|Statement of statement
-|ForInit of for_init
-|Expression of expression
-
-and program = declaration list
+type t = declaration list
 
 and declaration = 
 |Function of { name: ident; body: block }

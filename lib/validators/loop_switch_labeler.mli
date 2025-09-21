@@ -1,1 +1,1 @@
-val resolve : Vir.declaration list -> Vir.declaration list
+val resolve : Vir.t -> Vir.t

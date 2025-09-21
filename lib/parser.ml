@@ -47,7 +47,7 @@ let rec parse_from_lexer lexer =
   let parser = init lexer in
   program parser
 
-and program parser : Ast.program =
+and program parser : Ast.t =
   let rec program' parser decls =
     match parser.cur with
     | Some _ -> 
@@ -289,7 +289,7 @@ and get_prefix_fn (cur: Token.t) ?(peek: Token.t option = None) : (t -> t * Ast.
   | Ident _, _ -> variable_expr
   | IntLit _, _ -> int_lit_expr
   | Tilde, _ | Excl, _ | PlusPlus, _ | MinusMinus, _ | Plus, _ | Minus, _  -> left_unary_expr 
-  | _, _ -> failwith "can't find prefix function for this situation"
+  | _, _ -> failwith (Printf.sprintf "can't find prefix function for this situation %s" (Token.show cur))
 
 and get_infix_fn (cur: Token.t) : (t -> Ast.expression -> t * Ast.expression) =
 let open Token in
