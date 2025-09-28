@@ -121,7 +121,7 @@ let occ_cmd =
   let compile =
     Arg.(
       value & flag
-      & info [ "compile" ] ~docv:"COMPILE"
+      & info [ "compile"; "c" ] ~docv:"COMPILE"
           ~doc:"compile asm to object file and exit without linking")
   in
   let arch =

@@ -1,22 +1,22 @@
 open Ir
 
 let rec emit (air : Ir.t) : string =
-  ".section .text"
+  ".section .text\n"
   ^ String.concat "\n" (List.map subroutine air)
-  ^ ".section .note.GNU-stack,\"\",@progbits\n"
+  ^ "\n.section .note.GNU-stack,\"\",@progbits\n"
 
 and subroutine sub =
   let body = String.concat "\n" (List.map instruction sub.instructions) in
-  {%string|
-.global %{sub.name}
+  {%string|.global %{sub.name}
 %{sub.name}:
 pushq %rbp
 movq %rsp, %rbp
-%{body}
-|}
+%{body}|}
 
 and instruction = function
-  | Ret -> "movq %rbp, %rsp\npopq %rbp\nret"
+  | Ret -> {%string|movq %rbp, %rsp
+popq %rbp 
+ret|}
   | Mov { src; dst } -> [%string "movl %{operand src}, %{operand dst}"]
   | Unary { operator; operand = oper } ->
       let operator' = match operator with Neg -> "neg" | Not -> "not" in
@@ -40,12 +40,16 @@ and instruction = function
   | Idiv oper -> [%string "idivl %{operand oper}"]
   | Cdq -> "cdq"
   | AllocateStack size -> [%string "subq $%{Int.to_string size}, %rsp"]
-  | Jmp target -> [%string "jmp %{label target}"]
-  | Label lbl -> [%string "%{label lbl}:"]
+  | Jmp target -> [%string "jmp %{fmt_label target}"]
+  | Label lbl -> [%string "%{fmt_label lbl}:"]
   | JmpCC { cond; target } ->
-      [%string "j%{string_of_cond_code cond} %{label target}"]
+      [%string "j%{string_of_cond_code cond} %{fmt_label target}"]
   | SetCC { cond; dst } ->
       [%string "set%{string_of_cond_code cond} %{operand dst}"]
+  | DeallocateStack size -> [%string "addq $%{Int.to_string size}, %rsp"]
+  | Push op -> [%string "pushq %{operand op}"]
+  | Call name -> [%string "call %{name}"]
+(* | _ -> "" *)
 
 and string_of_cond_code = function
   | E -> "e"
@@ -55,7 +59,7 @@ and string_of_cond_code = function
   | L -> "l"
   | LE -> "le"
 
-and label lbl = ".L" ^ lbl
+and fmt_label lbl = ".L" ^ lbl
 
 and operand = function
   | Imm value -> [%string "$%{Int32.to_string value}"]
@@ -68,11 +72,31 @@ and operand = function
         | AX, W -> "ax"
         | AX, DW -> "eax"
         | AX, QW -> "rax"
+        | DI, LB -> "dil"
+        | DI, HB -> failwith "di doesn't have high byte part"
+        | DI, W -> "di"
+        | DI, DW -> "edi"
+        | DI, QW -> "rdi"
+        | SI, LB -> "sil"
+        | SI, HB -> failwith "si doesn't have hight byte part"
+        | SI, W -> "si"
+        | SI, DW -> "esi"
+        | SI, QW -> "rsi"
         | DX, LB -> "dl"
         | DX, HB -> "dh"
         | DX, W -> "dx"
         | DX, DW -> "edx"
         | DX, QW -> "rdx"
+        | R8, LB -> "r8b"
+        | R8, HB -> failwith "r8 doesn't have hight byte part"
+        | R8, W -> "r8w"
+        | R8, DW -> "r8d"
+        | R8, QW -> "r8"
+        | R9, LB -> "r9b"
+        | R9, HB -> failwith "r9 doesn't have hight byte part"
+        | R9, W -> "r9w"
+        | R9, DW -> "r9d"
+        | R9, QW -> "r9"
         | R10, LB -> "r10b"
         | R10, HB -> failwith "r10 doesn't have hight byte part"
         | R10, W -> "r10w"

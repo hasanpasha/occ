@@ -29,9 +29,14 @@ let rec resolve program = List.map resolve_declaration program
 
 and resolve_declaration decl =
   match decl with
-  | Ast.Function { name; body } ->
+  | Ast.Function { name; params; body } ->
       let state = init in
-      Ast.Function { name; body = resolve_block body state }
+      Ast.Function
+        {
+          name;
+          params;
+          body = Option.map (fun body -> resolve_block body state) body;
+        }
   | _ -> decl
 
 and resolve_block (blk : Ast.block) state =

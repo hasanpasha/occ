@@ -48,4 +48,9 @@ and fix_instruction instr =
   | Cmp { src1; src2 = Imm _ as src2 } ->
       let r10d = Reg { base = R10; part = DW } in
       [ Mov { src = src2; dst = r10d }; Cmp { src1; src2 = r10d } ]
+  | Push (Stack index) ->
+      [
+        Mov { src = Stack index; dst = Reg { base = AX; part = DW } };
+        Push (Reg { base = AX; part = QW });
+      ]
   | _ -> [ instr ]

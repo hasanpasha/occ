@@ -1,44 +1,37 @@
 open Tacky_ir
 
-(* let (|?) (opt: 'a option) (default_fn: unit -> 'a) : 'a =
-  match opt with
-  | Some v -> v
-  | None -> default_fn ()
-
-let (|??) (opt: 'a option) (default: 'a) : 'a =
-  match opt with
-  | Some v -> v
-  | None -> default *)
-
 let rec lower (program : Ast.t) : t =
-  List.map
-    (fun decl : function' ->
-      match decl with
-      | Ast.Function { name; body } ->
-          let counter = ref 0 in
-          let instructions = lower_block body counter in
-          let instructions = instructions @ [ Return (Constant 0) ] in
-          { name; instructions }
-      | Ast.Variable _ ->
-          failwith "top level variable declaration are not supported yet")
-    program
+  let counter = ref 0 in
+  List.map (fun decl -> lower_top_declaration decl counter) program
+  |> List.filter_map (fun x -> x)
 
-and lower_declaration decl counter =
+and lower_top_declaration decl counter : function' option =
   match decl with
-  | Ast.Variable { name; init } -> (
-      match init with
-      | Some expr ->
-          let value, instrs = lower_expression expr counter in
-          instrs @ [ Copy { src = value; dst = Variable name } ]
-      | None -> [])
+  | Ast.Function { name; params; body = Some body } ->
+      let instructions = lower_block body counter @ [ Return (Constant 0) ] in
+      Some { name; params; instructions }
+  | Ast.Function _ -> None
+  | Ast.Variable _ ->
+      failwith "top level variable declaration are not supported yet"
+
+and lower_inner_declaration decl counter =
+  match decl with
+  | Ast.Variable decl -> lower_variable_declaration decl counter
   | Ast.Function _ -> []
+
+and lower_variable_declaration { name; init } counter =
+  match init with
+  | Some expr ->
+      let value, instrs = lower_expression expr counter in
+      instrs @ [ Copy { src = value; dst = Variable name } ]
+  | None -> []
 
 and lower_block blk counter =
   List.concat (List.map (fun item -> lower_block_item item counter) blk)
 
 and lower_block_item item counter =
   match item with
-  | Ast.Decl decl -> lower_declaration decl counter
+  | Ast.Decl decl -> lower_inner_declaration decl counter
   | Ast.Stmt stmt -> lower_statement stmt counter
 
 and lower_statement stmt counter =
@@ -98,7 +91,7 @@ and lower_statement stmt counter =
       let continue_label = make_continue_label label in
 
       (match init with
-      | Ast.Decl decl -> lower_declaration decl counter
+      | Ast.VarDecl decl -> lower_variable_declaration decl counter
       | Ast.Expr (Some expr) ->
           let _, instrs = lower_expression expr counter in
           instrs
@@ -300,6 +293,14 @@ and lower_expression (expr : Ast.expression) (counter : int ref) :
         @ [ Copy { src = true'; dst }; Jump end_label; Label else_label ]
         @ false_instrs
         @ [ Copy { src = false'; dst }; Label end_label ] )
+  | Ast.FunctionCall { name; args } ->
+      let dst = make_temp_var counter in
+      let args' = List.map (fun arg -> lower_expression arg counter) args in
+      let args, args_instrs =
+        let vs, instrss = List.split args' in
+        (vs, List.concat instrss)
+      in
+      (dst, args_instrs @ [ FunCall { fun_name = name; args; dst } ])
 
 and make_unique prefix counter =
   let name = Printf.sprintf "%s.%d" prefix !counter in

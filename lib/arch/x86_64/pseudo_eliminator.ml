@@ -7,7 +7,8 @@ and transform_subroutine { name; instructions } =
   let instructions =
     List.map (fun instr -> transform_instruction instr state) instructions
   in
-  let instructions = Ir.AllocateStack (abs !(state.counter)) :: instructions in
+  let allocated_stack_size = (abs !(state.counter) + 15) land lnot 15 in
+  let instructions = Ir.AllocateStack allocated_stack_size :: instructions in
   { name; instructions }
 
 and transform_instruction instr state =
@@ -32,6 +33,7 @@ and transform_instruction instr state =
         }
   | Idiv operand -> Idiv (transform_operand operand state)
   | SetCC { cond; dst } -> SetCC { cond; dst = transform_operand dst state }
+  | Push operand -> Push (transform_operand operand state)
   | _ -> instr
 
 and transform_operand operand state =

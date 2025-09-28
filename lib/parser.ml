@@ -55,24 +55,60 @@ and program parser : Ast.t =
   List.rev decls
 
 and declaration parser =
-  let parser, type' = expect parser Token.Int in
-  match parser.peek with
-  | Some Token.LParen -> function' parser type'
-  | _ -> variable parser type'
+  let parser' = consume parser Token.Int in
+  match parser'.peek with
+  | Some Token.LParen ->
+      let parser, function' = function_decl parser in
+      (parser, Ast.Function function')
+  | _ ->
+      let parser, variable = variable_decl parser in
+      (parser, Ast.Variable variable)
 
-and function' parser type' =
-  let _ = type' in
+and function_decl parser =
+  let parser = consume parser Token.Int in
   let parser, name = expect_identifier parser in
   let parser = consume parser Token.LParen in
-  let parser = consume parser Token.Void in
+  let parser, params = param_list parser in
   let parser = consume parser Token.RParen in
 
-  let parser, body = block parser in
+  let parser, body =
+    match parser.cur with
+    | Some Semi ->
+        let parser = consume parser Token.Semi in
+        (parser, None)
+    | _ ->
+        let parser, blk = block parser in
+        (parser, Some blk)
+  in
 
-  (parser, Ast.Function { name; body })
+  (parser, { name; params; body })
 
-and variable parser type' =
-  let _ = type' in
+and param_list parser =
+  let rec param_list' parser params =
+    match parser.cur with
+    | Some Token.RParen -> (parser, params)
+    | Some Token.Void ->
+        let parser = consume parser Token.Void in
+        (parser, params)
+    | _ -> (
+        let parser = consume parser Token.Int in
+        let parser, param = expect_identifier parser in
+        let params = param :: params in
+
+        match (parser.cur, parser.peek) with
+        | Some Token.Comma, Some Token.RParen ->
+            failwith "trailing comma are not premitted"
+        | Some Token.Comma, _ ->
+            let parser = consume parser Token.Comma in
+            param_list' parser params
+        | _, _ -> (parser, params))
+  in
+
+  let parser, params = param_list' parser [] in
+  (parser, List.rev params)
+
+and variable_decl parser =
+  let parser = consume parser Token.Int in
   let parser, name = expect_identifier parser in
   let parser, init =
     match parser.cur with
@@ -84,7 +120,7 @@ and variable parser type' =
     | None -> failwith "unexpected end of token stream"
   in
   let parser = consume parser Token.Semi in
-  (parser, Ast.Variable { name; init })
+  (parser, { name; init })
 
 and block parser =
   let parser = consume parser Token.LCub in
@@ -224,8 +260,8 @@ and for_stmt parser =
         let parser = consume parser Token.Semi in
         (parser, Ast.Expr None)
     | Some Token.Int ->
-        let parser, decl = declaration parser in
-        (parser, Ast.Decl decl)
+        let parser, decl = variable_decl parser in
+        (parser, Ast.VarDecl decl)
     | _ ->
         let parser, expr = expression parser in
         let parser = consume parser Token.Semi in
@@ -285,11 +321,12 @@ and default_stmt parser =
 
 and expression parser = expression_prec parser Assignment
 
-and get_prefix_fn (cur : Token.t) ?(peek : Token.t option = None) :
+and get_prefix_fn (cur : Token.t) (peek : Token.t option) :
     t -> t * Ast.expression =
   let open Token in
   match (cur, peek) with
   | LParen, _ -> group_expr
+  | Ident _, Some LParen -> function_call_expr
   | Ident _, _ -> variable_expr
   | IntLit _, _ -> int_lit_expr
   | Tilde, _ | Excl, _ | PlusPlus, _ | MinusMinus, _ | Plus, _ | Minus, _ ->
@@ -335,7 +372,7 @@ and get_prec token =
 
 and expression_prec (parser : t) (prec : precedence) : t * Ast.expression =
   let parser, lhs =
-    (get_prefix_fn (parser.cur |> Option.get) ~peek:parser.peek) parser
+    (get_prefix_fn (parser.cur |> Option.get) parser.peek) parser
   in
   let rec parse_infix parser lhs =
     let cur_prec = get_prec (parser.cur |> Option.get) in
@@ -388,6 +425,31 @@ and conditional_expr parser cond =
   let parser = consume parser Token.Colon in
   let parser, false' = expression_prec parser Ternary in
   (parser, Ast.Conditional { cond; true'; false' })
+
+and function_call_expr parser =
+  let parser, name = expect_identifier parser in
+
+  let parser = consume parser Token.LParen in
+
+  let rec parse_args parser args =
+    match parser.cur with
+    | Some Token.RParen -> (parser, args)
+    | _ -> (
+        let parser, arg = expression parser in
+        let args = arg :: args in
+        match (parser.cur, parser.peek) with
+        | Some Token.Comma, Some Token.RParen ->
+            failwith "trailing comma are not premitted"
+        | Some Token.Comma, _ ->
+            let parser = consume parser Token.Comma in
+            parse_args parser args
+        | _ -> (parser, args))
+  in
+  let parser, args = parse_args parser [] in
+  let args = List.rev args in
+  let parser = consume parser Token.RParen in
+
+  (parser, FunctionCall { name; args })
 
 and expect parser expected_token =
   match parser.cur with

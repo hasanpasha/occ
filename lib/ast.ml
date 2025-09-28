@@ -8,8 +8,8 @@ and variable_declaration = { name : ident; init : expression option }
 
 and function_declaration = {
   name : ident;
-  (* params : ident list; *)
-  body : block;
+  params : ident list;
+  body : block option;
 }
 
 and block = block_item list
@@ -44,7 +44,7 @@ and statement =
   | Case of { expr : expression; stmt : statement option; label : ident }
   | Default of { stmt : statement option; label : ident }
 
-and for_init = Decl of declaration | Expr of expression option
+and for_init = VarDecl of variable_declaration | Expr of expression option
 
 and expression =
   | IntLit of int
@@ -58,6 +58,6 @@ and expression =
       true' : expression;
       false' : expression;
     }
-(* | FunctionCall of { name : ident; args : expression list } *)
+  | FunctionCall of { name : ident; args : expression list }
 
 and ident = string [@@deriving show, eq]

@@ -5,7 +5,8 @@ let src =
 module Log = (val Logs.src_log src : Logs.LOG)
 
 module Env = struct
-  type map = (string, string) Hashtbl.t
+  type value = { unique_name : string; has_linkage : bool }
+  type map = (string, value) Hashtbl.t
   type t = { map : map; parent : t option }
 
   let init = { map = Hashtbl.create 32; parent = None }
@@ -18,13 +19,16 @@ module Env = struct
     | None -> (
         match env.parent with Some env -> get_rec env name | None -> None)
 
-  let put env name unique = Hashtbl.add env.map name unique
+  let put env name ?(has_linkage : bool = false) (unique_name : string) =
+    Hashtbl.add env.map name { unique_name; has_linkage }
+
+  let is_global { map = _; parent } = Option.is_none parent
 end
 
 type t = { env : Env.t; counter : int ref }
 
 let init = { env = Env.init; counter = ref 0 }
-let copy { env; counter } = { env = Env.push env; counter }
+let push_scope { env; counter } = { env = Env.push env; counter }
 
 let rec resolve program =
   let state = init in
@@ -35,28 +39,58 @@ and resolve_program (program : Ast.t) (state : t) : Ast.t =
 
 and resolve_declaration decl state =
   match decl with
-  | Ast.Function { name; body } ->
-      Ast.Function { name; body = resolve_block body state }
-  | Ast.Variable { name; init } -> (
-      Log.debug (fun m -> m "resolving %s" name);
-      match Env.get state.env name with
-      | Some _ ->
-          failwith
-            (Printf.sprintf "variable with name %s is already defined" name)
-      | None ->
-          ();
-          let unique_name = make_unique name state.counter in
-          Log.debug (fun m ->
-              m "putting %s as %s in variables map" name unique_name);
-          Env.put state.env name unique_name;
-          Ast.Variable
-            {
-              name = unique_name;
-              init = Option.map (fun expr -> resolve_expression expr state) init;
-            })
+  | Ast.Function func -> Ast.Function (resolve_function_declaration func state)
+  | Ast.Variable var_decl ->
+      Ast.Variable (resolve_variable_declaration var_decl state)
 
-and resolve_block blk state =
-  let blk_map = copy state in
+and resolve_function_declaration { name; params; body } state =
+  if Env.is_global state.env then
+    match Env.get state.env name with
+    | Some { unique_name = _; has_linkage = false } ->
+        failwith "duplicate function declaration"
+    | Some _ -> ()
+    | None -> Env.put state.env name name ~has_linkage:true
+  else (
+    if Option.is_some body then
+      failwith "local function definition is not allowed";
+    Env.put state.env name name);
+
+  let state = push_scope state in
+  let params =
+    List.map
+      (fun param ->
+        match Env.get state.env param with
+        | Some _ -> failwith "can't have two parameters with the same name"
+        | None ->
+            let unique_param_name = make_unique name state.counter in
+            Env.put state.env param unique_param_name;
+            unique_param_name)
+      params
+  in
+  let body =
+    Option.map (fun body -> resolve_block body state ~new_scope:false) body
+  in
+
+  { name; params; body }
+
+and resolve_variable_declaration { name; init } state =
+  Log.debug (fun m -> m "resolving %s" name);
+  match Env.get state.env name with
+  | Some _ ->
+      failwith (Printf.sprintf "variable with name %s is already defined" name)
+  | None ->
+      let unique_name = make_unique name state.counter in
+      Log.debug (fun m ->
+          m "putting %s as %s in variables map" name unique_name);
+      Env.put state.env name unique_name;
+      {
+        name = unique_name;
+        init = Option.map (fun expr -> resolve_expression expr state) init;
+      }
+
+and resolve_block ?(new_scope : bool = true) (blk : Ast.block) (state : t) :
+    Ast.block =
+  let blk_map = if new_scope then push_scope state else state in
   List.map (fun item -> resolve_block_item item blk_map) blk
 
 and resolve_block_item item state =
@@ -95,12 +129,12 @@ and resolve_statement stmt state =
           label;
         }
   | Ast.For { init; cond; post; body; label } ->
-      let state = copy state in
+      let state = push_scope state in
       let init =
         match init with
-        | Ast.Decl decl -> Ast.Decl (resolve_declaration decl state)
-        | Ast.Expr (Some expr) ->
-            Ast.Expr (Some (resolve_expression expr state))
+        | Ast.VarDecl decl ->
+            Ast.VarDecl (resolve_variable_declaration decl state)
+        | Ast.Expr (Some e) -> Ast.Expr (Some (resolve_expression e state))
         | Ast.Expr None -> Ast.Expr None
       in
       Ast.For
@@ -168,7 +202,7 @@ and resolve_expression expr state =
   | Ast.Assignment { operator; lhs = Ast.Var name; rhs } ->
       let unique_name =
         match Env.get_rec state.env name with
-        | Some v -> v
+        | Some { unique_name; has_linkage = _ } -> unique_name
         | None -> failwith (Printf.sprintf "variable %s is not defined" name)
       in
       Ast.Assignment
@@ -180,7 +214,7 @@ and resolve_expression expr state =
   | Ast.Assignment _ -> failwith "invalid lvalue"
   | Ast.Var name -> (
       match Env.get_rec state.env name with
-      | Some unique_name -> Ast.Var unique_name
+      | Some { unique_name; has_linkage = _ } -> Ast.Var unique_name
       | None ->
           failwith (Printf.sprintf "variable with name %s is not defined" name))
   | Ast.Conditional { cond; true'; false' } ->
@@ -190,6 +224,12 @@ and resolve_expression expr state =
           true' = resolve_expression true' state;
           false' = resolve_expression false' state;
         }
+  | Ast.FunctionCall { name; args } -> (
+      match Env.get_rec state.env name with
+      | Some { unique_name; has_linkage = _ } ->
+          let args = List.map (fun arg -> resolve_expression arg state) args in
+          Ast.FunctionCall { name = unique_name; args }
+      | None -> failwith [%string "undeclared function %{name}"])
 
 and make_unique name counter =
   let name = Printf.sprintf "var.%s.%d" name !counter in

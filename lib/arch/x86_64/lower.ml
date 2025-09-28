@@ -1,8 +1,25 @@
 let rec lower (tir : Tacky_ir.t) : Ir.t =
   List.map lower_function tir |> Pseudo_eliminator.eliminate |> Fixup.fix
 
-and lower_function { name; instructions } : Ir.subroutine =
+and call_regs : Ir.regbase list = [ DI; SI; DX; CX; R8; R9 ]
+
+and lower_function { name; params; instructions } : Ir.subroutine =
   let instructions = List.concat (List.map lower_instruction instructions) in
+
+  let params_instrs =
+    List.mapi
+      (fun i param ->
+        let src =
+          match i < List.length call_regs with
+          | true -> Ir.Reg { base = List.nth call_regs i; part = DW }
+          | false -> Ir.Stack ((i - List.length call_regs + 2) * 8)
+        in
+        Ir.Mov { src; dst = Ir.Pseudo param })
+      params
+  in
+
+  let instructions = params_instrs @ instructions in
+
   { name; instructions }
 
 and lower_instruction instr =
@@ -111,6 +128,36 @@ and lower_instruction instr =
   | JumpIfNotZero { cond; target } ->
       let cond' = lower_value cond in
       [ Cmp { src1 = cond'; src2 = Imm 0l }; JmpCC { cond = NE; target } ]
+  | FunCall { fun_name; args; dst } ->
+      let regs_args = List.take (List.length call_regs) args in
+      let stack_args = List.drop (List.length call_regs) args in
+      let stack_padding = if List.length stack_args mod 2 != 0 then 8 else 0 in
+      let bytes_to_remove = (8 * List.length stack_args) + stack_padding in
+      let dst = lower_value dst in
+
+      let instrs =
+        (if stack_padding != 0 then [ AllocateStack stack_padding ] else [])
+        @ List.mapi
+            (fun i arg ->
+              let arg = lower_value arg in
+              Mov
+                {
+                  src = arg;
+                  dst = Reg { base = List.nth call_regs i; part = DW };
+                })
+            regs_args
+        @ List.map
+            (fun arg ->
+              let arg = lower_value arg in
+              Push arg)
+            (List.rev stack_args)
+        @ [ Call fun_name ]
+        @ (if bytes_to_remove != 0 then [ DeallocateStack bytes_to_remove ]
+           else [])
+        @ [ Mov { src = Reg { base = AX; part = DW }; dst } ]
+      in
+
+      instrs
 
 and lower_value = function
   | Constant value -> Imm (Int32.of_int value)

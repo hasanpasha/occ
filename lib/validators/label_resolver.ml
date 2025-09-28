@@ -17,11 +17,11 @@ and resolve_program (program : Ast.t) (state : t) : Ast.t =
 
 and resolve_declaration decl state =
   match decl with
-  | Ast.Function { name; body } ->
+  | Ast.Function { name; params; body } ->
       let this_state = copy state in
-      let body = gather_block body this_state in
-      let body = resolve_block body this_state in
-      Ast.Function { name; body }
+      let body = Option.map (fun body -> gather_block body this_state) body in
+      let body = Option.map (fun body -> resolve_block body this_state) body in
+      Ast.Function { name; params; body }
   | _ -> decl
 
 and gather_block blk state =
@@ -57,17 +57,7 @@ and gather_statement stmt state =
   | Ast.DoWhile { body; cond; label } ->
       Ast.DoWhile { body = gather_statement body state; cond; label }
   | Ast.For { init; cond; post; body; label } ->
-      Ast.For
-        {
-          init =
-            (match init with
-            | Ast.Decl decl -> Ast.Decl (resolve_declaration decl state)
-            | _ -> init);
-          cond;
-          post;
-          body = gather_statement body state;
-          label;
-        }
+      Ast.For { init; cond; post; body = gather_statement body state; label }
   | Ast.Switch { expr; stmt; label; cases; default } ->
       Ast.Switch
         { expr; stmt = gather_statement stmt state; label; cases; default }
@@ -117,17 +107,7 @@ and resolve_statement stmt state =
   | Ast.DoWhile { body; cond; label } ->
       Ast.DoWhile { body = resolve_statement body state; cond; label }
   | Ast.For { init; cond; post; body; label } ->
-      Ast.For
-        {
-          init =
-            (match init with
-            | Ast.Decl decl -> Ast.Decl (resolve_declaration decl state)
-            | _ -> init);
-          cond;
-          post;
-          body = resolve_statement body state;
-          label;
-        }
+      Ast.For { init; cond; post; body = resolve_statement body state; label }
   | Ast.Switch { expr; stmt; label; cases; default } ->
       Ast.Switch
         { expr; stmt = resolve_statement stmt state; label; cases; default }

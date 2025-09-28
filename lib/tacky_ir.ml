@@ -1,5 +1,10 @@
 type t = function' list
-and function' = { name : string; instructions : instruction list }
+
+and function' = {
+  name : string;
+  params : string list;
+  instructions : instruction list;
+}
 
 and instruction =
   | Return of value
@@ -10,6 +15,7 @@ and instruction =
   | JumpIfZero of { cond : value; target : string }
   | JumpIfNotZero of { cond : value; target : string }
   | Label of string
+  | FunCall of { fun_name : string; args : value list; dst : value }
 
 and value = Constant of int | Variable of string
 and unop = Negate | Complement | Not
