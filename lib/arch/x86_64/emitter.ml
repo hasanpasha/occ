@@ -15,18 +15,16 @@ let rec emit (air : Ir.t) : string =
       air
   in
 
-  ".section .data\n"
-  ^ String.concat "\n" (List.map variable variables)
-  ^ ".section .text\n"
+  String.concat "\n" (List.map variable variables)
+  ^ "\n.section .text\n"
   ^ String.concat "\n" (List.map subroutine subroutines)
   ^ "\n.section .note.GNU-stack,\"\",@progbits\n"
 
 and variable { name; global; init } =
-  (if global then [%string ".global %{name}\n"] else "")
-  ^ {%string|.align 4
-%{name}:
-.long %{string_of_int init}
-|}
+  (if init = 0 then ".section .bss\n" else ".section .data\n")
+  ^ (if global then [%string ".global %{name}\n"] else "")
+  ^ [%string ".align 4\n%{name}:\n"]
+  ^ if init = 0 then ".zero 4" else [%string ".long %{string_of_int init}"]
 
 and subroutine { name; global; instructions } =
   let body = String.concat "\n" (List.map instruction instructions) in
