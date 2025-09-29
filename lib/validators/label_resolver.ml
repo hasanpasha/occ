@@ -17,11 +17,11 @@ and resolve_program (program : Ast.t) (state : t) : Ast.t =
 
 and resolve_declaration decl state =
   match decl with
-  | Ast.Function { name; params; body } ->
+  | Ast.Function { name; params; body; storage } ->
       let this_state = copy state in
       let body = Option.map (fun body -> gather_block body this_state) body in
       let body = Option.map (fun body -> resolve_block body this_state) body in
-      Ast.Function { name; params; body }
+      Ast.Function { name; params; body; storage }
   | _ -> decl
 
 and gather_block blk state =

@@ -60,6 +60,9 @@ type t =
   (* types *)
   | Int
   | Void
+  (* class *)
+  | Static
+  | Extern
 [@@deriving show, eq]
 
 type opt_t = t option [@@deriving show, eq]

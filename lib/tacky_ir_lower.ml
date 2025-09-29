@@ -1,37 +1,54 @@
 open Tacky_ir
 
-let rec lower (program : Ast.t) : t =
+let rec lower (program : Ast.t) (symbols : Validators.Type_checker.t) :
+    Tacky_ir.t =
   let counter = ref 0 in
-  List.map (fun decl -> lower_top_declaration decl counter) program
+  List.map (fun decl -> lower_functions decl symbols counter) program
+  @ Hashtbl.fold
+      (fun key value acc -> convert_symbol_to_tacky key value :: acc)
+      symbols []
   |> List.filter_map (fun x -> x)
 
-and lower_top_declaration decl counter : function' option =
-  match decl with
-  | Ast.Function { name; params; body = Some body } ->
-      let instructions = lower_block body counter @ [ Return (Constant 0) ] in
-      Some { name; params; instructions }
-  | Ast.Function _ -> None
-  | Ast.Variable _ ->
-      failwith "top level variable declaration are not supported yet"
+and convert_symbol_to_tacky name entry =
+  match entry.attr with
+  | Static { init; global } -> (
+      match init with
+      | Initial i -> Some (StaticVariable { name; global; init = i })
+      | Tentative -> Some (StaticVariable { name; global; init = 0 })
+      | _ -> None)
+  | _ -> None
 
-and lower_inner_declaration decl counter =
+and lower_functions decl symbols counter =
   match decl with
-  | Ast.Variable decl -> lower_variable_declaration decl counter
+  | Ast.Function { name; params; body = Some body; storage = _ } ->
+      let body = lower_block body counter @ [ Return (Constant 0) ] in
+      let global =
+        match Hashtbl.find symbols name with
+        | { typ = _; attr = Fun { defined = _; global } } -> global
+        | _ -> failwith "unreachable"
+      in
+      Some (Function { name; global; params; body })
+  | Ast.Function _ -> None
+  | Ast.Variable _ -> None
+
+and lower_local_declaration decl counter =
+  match decl with
+  | Ast.Variable decl -> lower_local_variable_declaration decl counter
   | Ast.Function _ -> []
 
-and lower_variable_declaration { name; init } counter =
+and lower_local_variable_declaration { name; init; storage } counter =
   match init with
-  | Some expr ->
+  | Some expr when storage = None ->
       let value, instrs = lower_expression expr counter in
       instrs @ [ Copy { src = value; dst = Variable name } ]
-  | None -> []
+  | _ -> []
 
 and lower_block blk counter =
   List.concat (List.map (fun item -> lower_block_item item counter) blk)
 
 and lower_block_item item counter =
   match item with
-  | Ast.Decl decl -> lower_inner_declaration decl counter
+  | Ast.Decl decl -> lower_local_declaration decl counter
   | Ast.Stmt stmt -> lower_statement stmt counter
 
 and lower_statement stmt counter =
@@ -91,7 +108,7 @@ and lower_statement stmt counter =
       let continue_label = make_continue_label label in
 
       (match init with
-      | Ast.VarDecl decl -> lower_variable_declaration decl counter
+      | Ast.VarDecl decl -> lower_local_variable_declaration decl counter
       | Ast.Expr (Some expr) ->
           let _, instrs = lower_expression expr counter in
           instrs
@@ -141,8 +158,7 @@ and lower_statement stmt counter =
       [ Label label ]
       @ match stmt with Some stmt -> lower_statement stmt counter | None -> [])
 
-and lower_expression (expr : Ast.expression) (counter : int ref) :
-    value * instruction list =
+and lower_expression expr counter =
   match expr with
   | Ast.IntLit value -> (Constant value, [])
   | Ast.LeftUnary { operator = Plus; rhs } -> lower_expression rhs counter

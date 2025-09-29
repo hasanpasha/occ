@@ -24,9 +24,6 @@ type precedence =
   | Primary
 [@@deriving show, eq, enum]
 
-let prec_succ prec =
-  precedence_of_enum (precedence_to_enum prec + 1) |> Option.get
-
 let advance parser =
   let { lexer; cur = _; peek } = parser in
   let cur = peek in
@@ -55,17 +52,39 @@ and program parser : Ast.t =
   List.rev decls
 
 and declaration parser =
-  let parser' = consume parser Token.Int in
-  match parser'.peek with
-  | Some Token.LParen ->
-      let parser, function' = function_decl parser in
-      (parser, Ast.Function function')
-  | _ ->
-      let parser, variable = variable_decl parser in
-      (parser, Ast.Variable variable)
+  let parser, specifier = type_and_storage_class parser in
+  match parser.peek with
+  | Some Token.LParen -> function_decl parser specifier
+  | _ -> variable_decl parser specifier
 
-and function_decl parser =
-  let parser = consume parser Token.Int in
+and type_and_storage_class parser =
+  let rec split types classes parser =
+    match parser.cur with
+    | Some (Token.Int as tok) -> split (tok :: types) classes (advance parser)
+    | Some ((Token.Static | Token.Extern) as tok) ->
+        split types (tok :: classes) (advance parser)
+    | _ -> (parser, (types, classes))
+  in
+  let parser, (types, classes) = split [] [] parser in
+
+  if List.length types = 0 then failwith "Invalid type specifier";
+  if List.length classes > 1 then failwith "Invalid storage class";
+
+  let typ = List.hd types in
+  let klass =
+    if List.length classes = 1 then
+      Some
+        (match List.hd classes with
+        | Token.Static -> Ast.Static
+        | Token.Extern -> Ast.Extern
+        | _ -> failwith "invalid storage class")
+    else None
+  in
+
+  (parser, (typ, klass))
+
+and function_decl parser (typ, storage_class) =
+  let _ = typ in
   let parser, name = expect_identifier parser in
   let parser = consume parser Token.LParen in
   let parser, params = param_list parser in
@@ -81,7 +100,7 @@ and function_decl parser =
         (parser, Some blk)
   in
 
-  (parser, { name; params; body })
+  (parser, Function { name; params; body; storage = storage_class })
 
 and param_list parser =
   let rec param_list' parser params =
@@ -107,8 +126,8 @@ and param_list parser =
   let parser, params = param_list' parser [] in
   (parser, List.rev params)
 
-and variable_decl parser =
-  let parser = consume parser Token.Int in
+and variable_decl parser (typ, storage_class) =
+  let _ = typ in
   let parser, name = expect_identifier parser in
   let parser, init =
     match parser.cur with
@@ -120,7 +139,7 @@ and variable_decl parser =
     | None -> failwith "unexpected end of token stream"
   in
   let parser = consume parser Token.Semi in
-  (parser, { name; init })
+  (parser, Variable { name; init; storage = storage_class })
 
 and block parser =
   let parser = consume parser Token.LCub in
@@ -138,7 +157,7 @@ and block parser =
 
 and block_item parser =
   match parser.cur with
-  | Some Token.Int ->
+  | Some (Token.Int | Token.Static | Token.Extern) ->
       let parser, decl = declaration parser in
       (parser, Ast.Decl decl)
   | Some _ ->
@@ -260,8 +279,14 @@ and for_stmt parser =
         let parser = consume parser Token.Semi in
         (parser, Ast.Expr None)
     | Some Token.Int ->
-        let parser, decl = variable_decl parser in
-        (parser, Ast.VarDecl decl)
+        let parser, decl = declaration parser in
+        let decl =
+          match decl with
+          | Function _ ->
+              failwith "function declaration is not allowed in `for` init"
+          | Variable decl -> Ast.VarDecl decl
+        in
+        (parser, decl)
     | _ ->
         let parser, expr = expression parser in
         let parser = consume parser Token.Semi in
@@ -411,7 +436,11 @@ and right_unary_expr parser lhs =
 
 and binary_expr parser lhs =
   let parser, operator = expect_any parser in
-  let parser, rhs = expression_prec parser (prec_succ (get_prec operator)) in
+  let prec =
+    precedence_of_enum (precedence_to_enum (get_prec operator) + 1)
+    |> Option.get
+  in
+  let parser, rhs = expression_prec parser prec in
   (parser, Ast.Binary { operator; lhs; rhs })
 
 and assignment_expr parser lhs =

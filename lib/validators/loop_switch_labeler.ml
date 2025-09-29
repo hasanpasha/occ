@@ -25,17 +25,19 @@ let init =
     default = ref None;
   }
 
-let rec resolve program = List.map resolve_declaration program
+let rec resolve program =
+  let state = init in
+  List.map (fun decl -> resolve_declaration decl state) program
 
-and resolve_declaration decl =
+and resolve_declaration decl state =
   match decl with
-  | Ast.Function { name; params; body } ->
-      let state = init in
+  | Ast.Function { name; params; body; storage } ->
       Ast.Function
         {
           name;
           params;
           body = Option.map (fun body -> resolve_block body state) body;
+          storage;
         }
   | _ -> decl
 

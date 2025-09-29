@@ -47,19 +47,19 @@ let occ (options : options) =
       Logs.info (fun m -> m "%s" (Ast.show program));
       exit 0);
 
-    let vir = Validate.validate program in
+    let vir, symbols = Validate.validate program in
 
     if options.validate then (
       Logs.info (fun m -> m "%s" (Ast.show vir));
       exit 0);
 
-    let ir = Tacky_ir_lower.lower vir in
+    let ir = Tacky_ir_lower.lower vir symbols in
 
     if options.tacky then (
       Logs.info (fun m -> m "%s" (Tacky_ir.show ir));
       exit 0);
 
-    let air = Air_lower.lower ir options.arch in
+    let air = Air_lower.lower ir symbols options.arch in
 
     if options.codegen then (
       Logs.info (fun m -> m "%s" (Air.show air));

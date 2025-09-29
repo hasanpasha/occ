@@ -1,5 +1,13 @@
-type t = subroutine list
-and subroutine = { name : string; instructions : instruction list }
+type t = top_level list
+and top_level = Subroutine of subroutine | StaticVariable of static_variable
+
+and subroutine = {
+  name : string;
+  global : bool;
+  instructions : instruction list;
+}
+
+and static_variable = { name : string; global : bool; init : int }
 
 and instruction =
   | Mov of { src : operand; dst : operand }
@@ -22,8 +30,13 @@ and cond_code = E | NE | G | GE | L | LE
 and unop = Neg | Not
 and binop = Add | Sub | Imul | And | Or | Xor | Shl | Sal | Shr | Sar
 
-(* operand *)
-and operand = Imm of int32 | Reg of register | Pseudo of string | Stack of int
+and operand =
+  | Imm of int32
+  | Reg of register
+  | Pseudo of string
+  | Stack of int
+  | Data of string
+
 and register = { base : regbase; part : regpart }
 and regbase = AX | CX | DX | DI | SI | R8 | R9 | R10 | R11
 and regpart = LB | HB | W | DW | QW [@@deriving show, eq]

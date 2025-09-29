@@ -21,8 +21,6 @@ module Env = struct
 
   let put env name ?(has_linkage : bool = false) (unique_name : string) =
     Hashtbl.add env.map name { unique_name; has_linkage }
-
-  let is_global { map = _; parent } = Option.is_none parent
 end
 
 type t = { env : Env.t; counter : int ref }
@@ -35,25 +33,22 @@ let rec resolve program =
   resolve_program program state
 
 and resolve_program (program : Ast.t) (state : t) : Ast.t =
-  List.map (fun decl -> resolve_declaration decl state) program
+  List.map (fun decl -> resolve_file_scope_declaration decl state) program
 
-and resolve_declaration decl state =
+and resolve_file_scope_declaration decl state =
   match decl with
-  | Ast.Function func -> Ast.Function (resolve_function_declaration func state)
+  | Ast.Function func ->
+      Ast.Function (resolve_file_scope_function_declaration func state)
   | Ast.Variable var_decl ->
-      Ast.Variable (resolve_variable_declaration var_decl state)
+      Ast.Variable (resolve_file_scope_variable_declaration var_decl state)
 
-and resolve_function_declaration { name; params; body } state =
-  if Env.is_global state.env then
-    match Env.get state.env name with
-    | Some { unique_name = _; has_linkage = false } ->
-        failwith "duplicate function declaration"
-    | Some _ -> ()
-    | None -> Env.put state.env name name ~has_linkage:true
-  else (
-    if Option.is_some body then
-      failwith "local function definition is not allowed";
-    Env.put state.env name name);
+and resolve_file_scope_function_declaration { name; params; body; storage }
+    state =
+  (match Env.get state.env name with
+  | Some { unique_name = _; has_linkage = false } ->
+      failwith "duplicate function declaration"
+  | Some _ -> ()
+  | None -> Env.put state.env name name ~has_linkage:true);
 
   let state = push_scope state in
   let params =
@@ -71,22 +66,48 @@ and resolve_function_declaration { name; params; body } state =
     Option.map (fun body -> resolve_block body state ~new_scope:false) body
   in
 
-  { name; params; body }
+  { name; params; body; storage }
 
-and resolve_variable_declaration { name; init } state =
+and resolve_file_scope_variable_declaration decl state =
+  Env.put state.env decl.name decl.name ~has_linkage:true;
+  decl
+
+and resolve_local_declaration decl state =
+  match decl with
+  | Ast.Function func ->
+      Ast.Function (resolve_local_function_declaration func state)
+  | Ast.Variable var_decl ->
+      Ast.Variable (resolve_local_variable_declaration var_decl state)
+
+and resolve_local_function_declaration { name; params; body; storage } state =
+  if Option.is_some body then
+    failwith "local function definition is not allowed";
+
+  if storage = Some Static then
+    failwith [%string "invalid storage class 'static' for function '%{name}'"];
+
+  Env.put state.env name name;
+
+  { name; params; body; storage }
+
+and resolve_local_variable_declaration { name; init; storage } state =
   Log.debug (fun m -> m "resolving %s" name);
-  match Env.get state.env name with
-  | Some _ ->
-      failwith (Printf.sprintf "variable with name %s is already defined" name)
-  | None ->
-      let unique_name = make_unique name state.counter in
-      Log.debug (fun m ->
-          m "putting %s as %s in variables map" name unique_name);
-      Env.put state.env name unique_name;
-      {
-        name = unique_name;
-        init = Option.map (fun expr -> resolve_expression expr state) init;
-      }
+
+  (match Env.get state.env name with
+  | Some { unique_name = _; has_linkage }
+    when not (has_linkage && storage = Some Extern) ->
+      failwith "conflicting local declarations"
+  | _ -> ());
+
+  match storage with
+  | Some Extern ->
+      Env.put state.env name name ~has_linkage:true;
+      { name; init; storage }
+  | _ ->
+      let unique = make_unique name state.counter in
+      Env.put state.env name unique;
+      let init = Option.map (fun expr -> resolve_expression expr state) init in
+      { name = unique; init; storage }
 
 and resolve_block ?(new_scope : bool = true) (blk : Ast.block) (state : t) :
     Ast.block =
@@ -95,7 +116,7 @@ and resolve_block ?(new_scope : bool = true) (blk : Ast.block) (state : t) :
 
 and resolve_block_item item state =
   match item with
-  | Ast.Decl decl -> Ast.Decl (resolve_declaration decl state)
+  | Ast.Decl decl -> Ast.Decl (resolve_local_declaration decl state)
   | Ast.Stmt stmt -> Ast.Stmt (resolve_statement stmt state)
 
 and resolve_statement stmt state =
@@ -133,7 +154,7 @@ and resolve_statement stmt state =
       let init =
         match init with
         | Ast.VarDecl decl ->
-            Ast.VarDecl (resolve_variable_declaration decl state)
+            Ast.VarDecl (resolve_local_variable_declaration decl state)
         | Ast.Expr (Some e) -> Ast.Expr (Some (resolve_expression e state))
         | Ast.Expr None -> Ast.Expr None
       in

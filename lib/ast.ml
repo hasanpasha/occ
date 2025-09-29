@@ -4,14 +4,23 @@ and declaration =
   | Variable of variable_declaration
   | Function of function_declaration
 
-and variable_declaration = { name : ident; init : expression option }
+and variable_declaration = {
+  name : ident;
+  init : optional_expression;
+  storage : storage_class option;
+}
 
 and function_declaration = {
   name : ident;
   params : ident list;
   body : block option;
+  storage : optional_storage_class;
 }
 
+and optional_storage_class = storage_class option
+and storage_class = Static | Extern
+
+(* *)
 and block = block_item list
 and block_item = Stmt of statement | Decl of declaration
 
@@ -45,6 +54,9 @@ and statement =
   | Default of { stmt : statement option; label : ident }
 
 and for_init = VarDecl of variable_declaration | Expr of expression option
+
+(* *)
+and optional_expression = expression option
 
 and expression =
   | IntLit of int

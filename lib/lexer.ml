@@ -100,9 +100,11 @@ and lex_identifier lexer =
   let lexer, ident = read_while lexer is_identifier in
   ( lexer,
     match ident with
-    | "return" -> Return
+    | "static" -> Static
+    | "extern" -> Extern
     | "int" -> Int
     | "void" -> Void
+    | "return" -> Return
     | "if" -> If
     | "else" -> Else
     | "goto" -> Goto

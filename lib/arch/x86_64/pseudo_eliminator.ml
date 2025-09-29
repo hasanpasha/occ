@@ -1,15 +1,25 @@
-type state = { map : (string, int) Hashtbl.t; counter : int ref }
+type state = {
+  symbols : Validators.Type_checker.t;
+  map : (string, int) Hashtbl.t;
+  counter : int ref;
+}
 
-let rec eliminate (air : Ir.t) : Ir.t = List.map transform_subroutine air
+let rec eliminate (air : Ir.t) (symbols : Validators.Type_checker.t) : Ir.t =
+  let state = { symbols; map = Hashtbl.create 32; counter = ref 0 } in
+  List.map (fun top -> transform_top top state) air
 
-and transform_subroutine { name; instructions } =
-  let state = { map = Hashtbl.create 32; counter = ref 0 } in
-  let instructions =
-    List.map (fun instr -> transform_instruction instr state) instructions
-  in
-  let allocated_stack_size = (abs !(state.counter) + 15) land lnot 15 in
-  let instructions = Ir.AllocateStack allocated_stack_size :: instructions in
-  { name; instructions }
+and transform_top top state =
+  match top with
+  | Subroutine { name; global; instructions } ->
+      let instructions =
+        List.map (fun instr -> transform_instruction instr state) instructions
+      in
+      let allocated_stack_size = (abs !(state.counter) + 15) land lnot 15 in
+      let instructions =
+        Ir.AllocateStack allocated_stack_size :: instructions
+      in
+      Ir.Subroutine { name; global; instructions }
+  | StaticVariable _ -> top
 
 and transform_instruction instr state =
   match instr with
@@ -38,14 +48,14 @@ and transform_instruction instr state =
 
 and transform_operand operand state =
   match operand with
-  | Pseudo name ->
-      let index =
-        match Hashtbl.find_opt state.map name with
-        | Some v -> v
-        | None ->
-            state.counter := !(state.counter) - 4;
-            Hashtbl.add state.map name !(state.counter);
-            !(state.counter)
-      in
-      Stack index
+  | Pseudo name -> (
+      match
+        (Hashtbl.find_opt state.map name, Hashtbl.find_opt state.symbols name)
+      with
+      | Some v, _ -> Ir.Stack v
+      | _, Some { typ = Int; attr = Static _ } -> Ir.Data name
+      | _, _ ->
+          state.counter := !(state.counter) - 4;
+          Hashtbl.add state.map name !(state.counter);
+          Ir.Stack !(state.counter))
   | _ -> operand

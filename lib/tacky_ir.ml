@@ -1,10 +1,13 @@
-type t = function' list
+type t = top_level list
 
-and function' = {
-  name : string;
-  params : string list;
-  instructions : instruction list;
-}
+and top_level =
+  | Function of {
+      name : string;
+      global : bool;
+      params : string list;
+      body : instruction list;
+    }
+  | StaticVariable of { name : string; global : bool; init : int }
 
 and instruction =
   | Return of value

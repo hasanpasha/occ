@@ -1,26 +1,31 @@
-let rec lower (tir : Tacky_ir.t) : Ir.t =
-  List.map lower_function tir |> Pseudo_eliminator.eliminate |> Fixup.fix
+let rec lower (tir : Tacky_ir.t) (symbols : Validators.Type_checker.t) : Ir.t =
+  List.map lower_top tir
+  |> (fun temp -> Pseudo_eliminator.eliminate temp symbols)
+  |> Fixup.fix
 
 and call_regs : Ir.regbase list = [ DI; SI; DX; CX; R8; R9 ]
 
-and lower_function { name; params; instructions } : Ir.subroutine =
-  let instructions = List.concat (List.map lower_instruction instructions) in
+and lower_top top =
+  match top with
+  | Function func ->
+      let instructions = List.concat (List.map lower_instruction func.body) in
 
-  let params_instrs =
-    List.mapi
-      (fun i param ->
-        let src =
-          match i < List.length call_regs with
-          | true -> Ir.Reg { base = List.nth call_regs i; part = DW }
-          | false -> Ir.Stack ((i - List.length call_regs + 2) * 8)
-        in
-        Ir.Mov { src; dst = Ir.Pseudo param })
-      params
-  in
+      let params_instrs =
+        List.mapi
+          (fun i param ->
+            let src =
+              match i < List.length call_regs with
+              | true -> Ir.Reg { base = List.nth call_regs i; part = DW }
+              | false -> Ir.Stack ((i - List.length call_regs + 2) * 8)
+            in
+            Ir.Mov { src; dst = Ir.Pseudo param })
+          func.params
+      in
 
-  let instructions = params_instrs @ instructions in
-
-  { name; instructions }
+      let instructions = params_instrs @ instructions in
+      Ir.Subroutine { name = func.name; global = func.global; instructions }
+  | StaticVariable { name; global; init } ->
+      Ir.StaticVariable { name; global; init }
 
 and lower_instruction instr =
   let open Ir in
@@ -161,4 +166,4 @@ and lower_instruction instr =
 
 and lower_value = function
   | Constant value -> Imm (Int32.of_int value)
-  | Tacky_ir.Variable name -> Pseudo name
+  | Variable name -> Pseudo name

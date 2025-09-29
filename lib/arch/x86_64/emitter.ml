@@ -1,14 +1,37 @@
 open Ir
 
 let rec emit (air : Ir.t) : string =
-  ".section .text\n"
-  ^ String.concat "\n" (List.map subroutine air)
+  let subroutines =
+    List.filter_map
+      (fun top ->
+        match top with Subroutine subroutine -> Some subroutine | _ -> None)
+      air
+  in
+
+  let variables =
+    List.filter_map
+      (fun top ->
+        match top with StaticVariable variable -> Some variable | _ -> None)
+      air
+  in
+
+  ".section .data\n"
+  ^ String.concat "\n" (List.map variable variables)
+  ^ ".section .text\n"
+  ^ String.concat "\n" (List.map subroutine subroutines)
   ^ "\n.section .note.GNU-stack,\"\",@progbits\n"
 
-and subroutine sub =
-  let body = String.concat "\n" (List.map instruction sub.instructions) in
-  {%string|.global %{sub.name}
-%{sub.name}:
+and variable { name; global; init } =
+  (if global then [%string ".global %{name}\n"] else "")
+  ^ {%string|.align 4
+%{name}:
+.long %{string_of_int init}
+|}
+
+and subroutine { name; global; instructions } =
+  let body = String.concat "\n" (List.map instruction instructions) in
+  (if global then [%string ".global %{name}\n"] else "")
+  ^ {%string|%{name}:
 pushq %rbp
 movq %rsp, %rbp
 %{body}|}
@@ -115,3 +138,4 @@ and operand = function
       in
       "%" ^ name
   | Pseudo _ -> failwith "final air should't containt pseudo operand"
+  | Data name -> [%string "%{name}(%rip)"]
