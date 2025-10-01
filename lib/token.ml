@@ -8,6 +8,7 @@ type t =
   | LCub
   | RCub
   | Semi
+  | Hash
   | Tilde
   | Excl
   | Plus

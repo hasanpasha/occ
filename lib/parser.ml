@@ -2,8 +2,11 @@ let src = Logs.Src.create "occ.parser" ~doc:"logs occ's parser events"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-type t = { lexer : Lexer.t; cur : Token.t option; peek : Token.t option }
-[@@deriving show]
+type t = {
+  preprocessor : Preprocessor.t;
+  cur : Token.t option;
+  peek : Token.t option;
+}
 
 type precedence =
   | Nothing
@@ -25,19 +28,19 @@ type precedence =
 [@@deriving show, eq, enum]
 
 let advance parser =
-  let { lexer; cur = _; peek } = parser in
+  let { preprocessor; cur = _; peek } = parser in
   let cur = peek in
-  let lexer, peek = Lexer.next_token lexer in
-  { lexer; cur; peek }
+  let preprocessor, peek = Preprocessor.next_token preprocessor in
+  { preprocessor; cur; peek }
 
-let init (lexer : Lexer.t) : t =
-  let parser = { lexer; cur = None; peek = None } in
+let init (preprocessor : Preprocessor.t) : t =
+  let parser = { preprocessor; cur = None; peek = None } in
   let parser = advance parser in
   let parser = advance parser in
   parser
 
-let rec parse_from_lexer lexer =
-  let parser = init lexer in
+let rec parse preprocessor =
+  let parser = init preprocessor in
   program parser
 
 and program parser : Ast.t =

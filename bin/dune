@@ -1,4 +1,6 @@
 (executable
  (public_name occ)
  (name main)
+ (preprocess
+  (pps ppx_string))
  (libraries occ cmdliner logs logs.fmt))

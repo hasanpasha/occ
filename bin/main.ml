@@ -4,6 +4,7 @@ open Cmdliner
 type options = {
   verbose : bool;
   lex : bool;
+  preprocess : bool;
   parse : bool;
   validate : bool;
   tacky : bool;
@@ -30,51 +31,60 @@ let occ (options : options) =
   let expand_cmd_code =
     Sys.command (Printf.sprintf "gcc -P -E %s -o %s" options.input cc)
   in
-  if expand_cmd_code != 0 then exit expand_cmd_code
-  else
-    let input = In_channel.with_open_text cc In_channel.input_all in
 
-    let lexer = Lexer.init input in
+  if expand_cmd_code != 0 then exit expand_cmd_code;
 
-    if options.lex then (
-      let seq = Lexer.lex lexer in
-      Seq.iter (fun tok -> Logs.info (fun m -> m "%s" (Token.show tok))) seq;
-      exit 0);
+  (* let input = In_channel.with_open_text cc In_channel.input_all in *)
+  let input = In_channel.with_open_text options.input In_channel.input_all in
 
-    let program = Parser.parse_from_lexer lexer in
+  let lexer = Lexer.init input in
 
-    if options.parse then (
-      Logs.info (fun m -> m "%s" (Ast.show program));
-      exit 0);
+  if options.lex then (
+    let seq = Lexer.lex lexer in
+    Seq.iter (fun tok -> Logs.info (fun m -> m "%s" (Token.show tok))) seq;
+    exit 0);
 
-    let vir, symbols = Validate.validate program in
+  let preprocessor = Preprocessor.init lexer in
 
-    if options.validate then (
-      Logs.info (fun m -> m "%s" (Ast.show vir));
-      exit 0);
+  if options.preprocess then (
+    let seq = Preprocessor.process preprocessor in
+    Seq.iter (fun tok -> Logs.info (fun m -> m "%s" (Token.show tok))) seq;
+    exit 0);
 
-    let ir = Tacky_ir_lower.lower vir symbols in
+  let program = Parser.parse preprocessor in
 
-    if options.tacky then (
-      Logs.info (fun m -> m "%s" (Tacky_ir.show ir));
-      exit 0);
+  if options.parse then (
+    Logs.info (fun m -> m "%s" (Ast.show program));
+    exit 0);
 
-    let air = Air_lower.lower ir symbols options.arch in
+  let vir, symbols = Validate.validate program in
 
-    if options.codegen then (
-      Logs.info (fun m -> m "%s" (Air.show air));
-      exit 0);
+  if options.validate then (
+    Logs.info (fun m -> m "%s" (Ast.show vir));
+    exit 0);
 
-    let s = replace_extension options.input "s" in
-    Out_channel.with_open_text s (fun oc -> output_string oc (Air.emit air));
+  let ir = Tacky_ir_lower.lower vir symbols in
 
-    let obj = replace_extension options.input "o" in
-    if Sys.command (Printf.sprintf "gcc -c %s -o %s" s obj) != 0 then exit 1;
+  if options.tacky then (
+    Logs.info (fun m -> m "%s" (Tacky_ir.show ir));
+    exit 0);
 
-    if options.compile then exit 0;
+  let air = Air_lower.lower ir symbols options.arch in
 
-    let exe = Filename.chop_extension options.input in
-    if Sys.command (Printf.sprintf "gcc %s -o %s" obj exe) != 0 then exit 1
+  if options.codegen then (
+    Logs.info (fun m -> m "%s" (Air.show air));
+    exit 0);
+
+  let s = replace_extension options.input "s" in
+  Out_channel.with_open_text s (fun oc -> output_string oc (Air.emit air));
+
+  let obj = replace_extension options.input "o" in
+  if Sys.command [%string "gcc -c %{s} -o %{obj}"] != 0 then exit 1;
+
+  if options.compile then exit 0;
+
+  let exe = Filename.chop_extension options.input in
+  if Sys.command [%string "gcc %{obj} -o %{exe}"] != 0 then exit 1
 
 let arch_conv : Air_lower.arch Arg.conv =
   let parse = function
@@ -98,6 +108,11 @@ let occ_cmd =
   in
   let lex =
     Arg.(value & flag & info [ "lex" ] ~docv:"LEX" ~doc:"lex and exit")
+  in
+  let preprocess =
+    Arg.(
+      value & flag
+      & info [ "preprocess" ] ~docv:"PREPROCESS" ~doc:"preprocess and exit")
   in
   let parse =
     Arg.(value & flag & info [ "parse" ] ~docv:"PARSE" ~doc:"parse and exit")
@@ -130,10 +145,23 @@ let occ_cmd =
   in
   let opts_term =
     Term.(
-      const (fun verbose lex parse validate tacky codegen compile arch input ->
+      const
+        (fun
+          verbose
+          lex
+          preprocess
+          parse
+          validate
+          tacky
+          codegen
+          compile
+          arch
+          input
+        ->
           {
             verbose;
             lex;
+            preprocess;
             parse;
             validate;
             tacky;
@@ -142,8 +170,8 @@ let occ_cmd =
             arch;
             input;
           })
-      $ verbose $ lex $ parse $ validate $ tacky $ codegen $ compile $ arch
-      $ input)
+      $ verbose $ lex $ preprocess $ parse $ validate $ tacky $ codegen
+      $ compile $ arch $ input)
   in
   let doc = "Compile a subset of c language program using occ compiler" in
   let man =

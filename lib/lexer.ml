@@ -49,6 +49,7 @@ and next_token lexer =
         | '{' -> sym1 LCub
         | '}' -> sym1 RCub
         | ';' -> sym1 Semi
+        | '#' -> sym1 Hash
         | '~' -> sym1 Tilde
         | '!' when peek_is '=' -> sym2 ExclEqual
         | '!' -> sym1 Excl
@@ -89,7 +90,7 @@ and next_token lexer =
         | _ when Char.is_digit ch -> lex_number lexer
         | _ ->
             Log.err (fun m -> m "unrecognized character: %c" ch);
-            failwith (Printf.sprintf "unknown char: %c" ch)
+            failwith (Printf.sprintf "unrecognized character: %c" ch)
       in
       (lexer, Some token)
 
